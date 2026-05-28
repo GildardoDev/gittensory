@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## mcp-v0.2.0 - 2026-05-28
 
 
 ### Features
