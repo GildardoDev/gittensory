@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { authenticatePrivateToken, extractBearerToken, type AuthIdentity } from "../auth/security";
+import { loadControlPanelRoleSummary } from "../services/control-panel-roles";
 import {
   countOpenIssues,
   countOpenPullRequests,
@@ -1010,7 +1011,10 @@ function authoritativeContributorRepoStats(
 }
 
 async function authenticateMcpRequest(c: AppContext): Promise<AuthIdentity | null> {
-  return authenticatePrivateToken(c.env, extractBearerToken(c.req.header("authorization")));
+  const identity = await authenticatePrivateToken(c.env, extractBearerToken(c.req.header("authorization")));
+  if (!identity || identity.kind !== "session") return identity;
+  const summary = await loadControlPanelRoleSummary(c.env, identity.actor);
+  return summary.roles.length > 0 ? identity : null;
 }
 
 function getExecutionContext(c: AppContext): ExecutionContext<unknown> {

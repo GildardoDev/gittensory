@@ -522,7 +522,7 @@ export function buildOpenApiSpec() {
       401: { description: "Unauthorized" },
     },
   });
-  for (const path of ["/v1/app/miner-dashboard", "/v1/app/maintainer-dashboard", "/v1/app/operator-dashboard", "/v1/app/commands", "/v1/app/digest"]) {
+  for (const path of ["/v1/app/roles", "/v1/app/miner-dashboard", "/v1/app/maintainer-dashboard", "/v1/app/operator-dashboard", "/v1/app/commands", "/v1/app/digest"]) {
     registry.registerPath({
       method: "get",
       path,
