@@ -2182,6 +2182,7 @@ describe("api routes", () => {
       runId: "api-quality-run",
       actorLogin: "quality-user",
       actionType: "prepare_pr_packet",
+      surface: "api",
       targetRepoFullName: "JSONbored/gittensory",
       targetPullNumber: null,
       targetIssueNumber: null,
@@ -2218,6 +2219,9 @@ describe("api routes", () => {
         visibility: "operator_only",
         publicExport: expect.objectContaining({ available: false }),
         totals: expect.objectContaining({ total: 1, positive: 1, negative: 0 }),
+        rollups: expect.arrayContaining([
+          expect.objectContaining({ role: "miner", surface: "api", lane: "contributor", outcomeCategory: "merged", count: 1 }),
+        ]),
         roleSurfaces: expect.arrayContaining([expect.objectContaining({ role: "miner", positive: 1 })]),
       }),
     });
