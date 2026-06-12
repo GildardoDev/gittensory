@@ -3600,6 +3600,11 @@ export function buildPublicPrIntelligenceComment(args: {
   const gateBlocking = gateEnabled && (gateConclusion === "failure" || gateConclusion === "action_required");
   const missingLinkedIssue = args.pr.linkedIssues.length === 0 && !hasClearNoIssueRationale(args.pr);
   const confirmedMiner = isOfficialContributorDetection(args.detection);
+  // Author with no Gittensor footprint at all (not detected via official API or cache): gittensory's
+  // contribution analysis is for Gittensor contributors, so fire MINIMALLY — a brief welcome + the
+  // earn invite — instead of the full readiness panel. A KNOWN contributor (official or cached) still
+  // gets the full review. The always-on footer CTA appears either way, so every PR keeps marketing.
+  if (!args.detection.detected) return buildMinimalInviteComment(args);
   const genericOssMode = args.settings.publicAudienceMode === "oss_maintainer";
   const hasPublicWarnings = publicFindings.some((finding) => finding.severity === "warning");
   const alert = gateBlocking
@@ -3710,6 +3715,25 @@ export function buildPublicPrIntelligenceComment(args: {
     "",
     "---",
     footer,
+  ].join("\n");
+}
+
+/** Minimal public comment for a non-registered contributor. gittensory's readiness/contribution
+ *  analysis is for registered Gittensor contributors, so we skip the panel and post a brief welcome
+ *  + earn invite; the always-on footer CTA does the conversion. Carries the same panel marker so it
+ *  updates in place if the author later registers (the full panel then replaces it). */
+function buildMinimalInviteComment(args: { pr: PullRequestRecord }): string {
+  return [
+    "<!-- gittensory-pr-panel:v1 -->",
+    "",
+    ...formatAlertBlock([
+      "[!NOTE]",
+      "## 👋 Thanks for the contribution",
+      "The maintainer will review your PR. Open-source work like this can earn on Gittensor — register your GitHub account and contributions like this become eligible to earn.",
+    ]),
+    "",
+    "---",
+    gittensoryFooter({ earnUrl: gittensorRepoEarnUrl(args.pr.repoFullName) }),
   ].join("\n");
 }
 
