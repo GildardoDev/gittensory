@@ -12,7 +12,7 @@
 //   • Fail-safe on every path: AI off / no binding / over-budget / unparseable / unsafe text → no finding.
 //   • Opt-in: only runs when the repo set `gate.slop.aiAdvisory: true` on top of `gate.slop.mode != off`.
 //
-// Free Cloudflare Workers AI only (one call, metered against the shared daily neuron budget). BYOK is a
+// Free Cloudflare Workers AI only (bounded and metered against the shared daily neuron budget). BYOK is a
 // possible later enhancement; slop assessment does not need a frontier model. Every public string is
 // forced through `toPublicSafe`; anything tripping the public/private boundary is dropped, not published.
 import type { SignalFinding } from "../signals/engine";
@@ -70,6 +70,7 @@ export type AiSlopResult =
 type SlopOpinion = { band: SlopBand; rationale: string; signals: string[] };
 
 const SLOP_BANDS: readonly SlopBand[] = ["clean", "low", "elevated", "high"];
+const SLOP_AI_MAX_MODEL_CALLS = 6;
 
 function isSlopBand(value: unknown): value is SlopBand {
   return typeof value === "string" && (SLOP_BANDS as readonly string[]).includes(value);
@@ -173,7 +174,7 @@ export async function runGittensoryAiSlopAdvisory(env: Env, input: AiSlopInput):
 
   const maxTokens = clampNumber(Number(env.AI_MAX_OUTPUT_TOKENS || 256), 256, 1024);
   const user = buildUserPrompt(input);
-  const estimatedNeurons = estimateNeurons(SLOP_SYSTEM_PROMPT.length + user.length, maxTokens, 1);
+  const estimatedNeurons = estimateNeurons(SLOP_SYSTEM_PROMPT.length + user.length, maxTokens, SLOP_AI_MAX_MODEL_CALLS);
   const budget = clampNumber(Number(env.AI_DAILY_NEURON_BUDGET || 10000), 0, 1_000_000);
   const used = await sumAiEstimatedNeuronsSince(env, utcDayStartIso());
   const remainingBudget = Math.max(0, budget - used);

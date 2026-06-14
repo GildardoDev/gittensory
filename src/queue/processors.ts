@@ -929,8 +929,8 @@ export async function runAiReviewForAdvisory(
 /**
  * AI-assisted slop advisory (opt-in `slopAiAdvisory`). Appends at most one ADVISORY-only `ai_slop_advisory`
  * finding to the advisory; NEVER touches slopRisk or the gate (only the deterministic core can block). The
- * caller gates on `settings.slopAiAdvisory` and reuses the already-fetched changed files. Fail-safe: any AI
- * error is swallowed so the gate still finalizes.
+ * caller gates on `settings.slopAiAdvisory`, confirms the contributor, and reuses the already-fetched changed
+ * files. Fail-safe: any AI error is swallowed so the gate still finalizes.
  */
 export async function runAiSlopForAdvisory(
   env: Env,
@@ -939,11 +939,12 @@ export async function runAiSlopForAdvisory(
     repoFullName: string;
     pr: { number: number; title: string; body?: string | null | undefined };
     author: string | null;
+    confirmedContributor: boolean;
     files: Awaited<ReturnType<typeof listPullRequestFiles>>;
     deterministicBand: SlopBand;
   },
 ): Promise<void> {
-  if (!args.advisory.headSha) return;
+  if (!args.confirmedContributor || !args.advisory.headSha) return;
   try {
     const result = await runGittensoryAiSlopAdvisory(env, {
       repoFullName: args.repoFullName,
@@ -1140,9 +1141,22 @@ async function maybePublishPrPublicSurface(
       scopedOverlapCount: unionScopedOverlapClusters(collisions, pr, preflight.collisions).length,
     });
 
+    if (gateEnabled && author && !publicSurfaceSkipped && !official) {
+      official = await getCachedOfficialMinerDetection(env, author, {
+        targetKey: `${repoFullName}#${pr.number}`,
+        deliveryId: webhook.deliveryId,
+      });
+    }
+
+    // Only CONFIRMED gittensor contributors can be hard-blocked; everyone else (or an unavailable
+    // detection) gets a neutral, non-blocking gate. Gate-only runs still verify confirmation before
+    // evaluating blockers so confirmed contributors cannot bypass a required Gate check.
+    const confirmedContributor = official?.status === "confirmed";
+
     // Anti-slop (#530/#532): only when opted in (slopGateMode !== "off"). Surface the deterministic slop
     // findings as advisory context, and feed the score to the gate (it only blocks under slop: block + the
-    // threshold). Loads files lazily so disabled repos pay nothing.
+    // threshold). Loads files lazily so disabled repos pay nothing. The AI advisory is additionally limited
+    // to confirmed contributors so untrusted PR authors cannot spend the shared Workers AI budget.
     let slopRisk: number | null = null;
     if (settings.slopGateMode !== "off") {
       const slopFiles = await listPullRequestFiles(env, repoFullName, pr.number);
@@ -1155,21 +1169,9 @@ async function maybePublishPrPublicSurface(
       // AI-assisted slop advisory (#533, opt-in). Reuses the already-fetched files; appends at most one
       // advisory-only finding. Deliberately does NOT update slopRisk — only the deterministic core blocks.
       if (settings.slopAiAdvisory) {
-        await runAiSlopForAdvisory(env, { advisory, repoFullName, pr, author, files: slopFiles, deterministicBand: slop.band });
+        await runAiSlopForAdvisory(env, { advisory, repoFullName, pr, author, confirmedContributor, files: slopFiles, deterministicBand: slop.band });
       }
     }
-
-    if (gateEnabled && author && !publicSurfaceSkipped && !official) {
-      official = await getCachedOfficialMinerDetection(env, author, {
-        targetKey: `${repoFullName}#${pr.number}`,
-        deliveryId: webhook.deliveryId,
-      });
-    }
-
-    // Only CONFIRMED gittensor contributors can be hard-blocked; everyone else (or an unavailable
-    // detection) gets a neutral, non-blocking gate. Gate-only runs still verify confirmation before
-    // evaluating blockers so confirmed contributors cannot bypass a required Gate check.
-    const confirmedContributor = official?.status === "confirmed";
 
     // AI maintainer review (opt-in via aiReviewMode). Mutates `advisory` with a consensus defect (if any)
     // BEFORE the gate evaluates, and returns advisory notes for the panel. Inside the try so any AI

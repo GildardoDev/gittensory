@@ -256,17 +256,35 @@ describe("runAiSlopForAdvisory (processor wiring)", () => {
       repoFullName: "acme/widgets",
       pr,
       author: "alice",
+      confirmedContributor: true,
       files,
       deterministicBand: "elevated",
     });
     expect(adv.findings.map((f) => f.code)).toEqual([AI_SLOP_FINDING_CODE]);
   });
 
+
+  it("no-ops for unconfirmed contributors so untrusted PRs cannot spend AI budget", async () => {
+    const adv = advisory();
+    const run = vi.fn(async () => ({ response: slopJson({ band: "high" }) }));
+    await runAiSlopForAdvisory(enabledEnv(run), {
+      advisory: adv,
+      repoFullName: "acme/widgets",
+      pr,
+      author: "alice",
+      confirmedContributor: false,
+      files,
+      deterministicBand: "elevated",
+    });
+    expect(adv.findings).toEqual([]);
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("no-ops when the advisory has no head SHA", async () => {
     const noSha = advisory();
     delete (noSha as Partial<Advisory>).headSha;
     const run = vi.fn();
-    await runAiSlopForAdvisory(enabledEnv(run), { advisory: noSha, repoFullName: "acme/widgets", pr, author: "alice", files, deterministicBand: "low" });
+    await runAiSlopForAdvisory(enabledEnv(run), { advisory: noSha, repoFullName: "acme/widgets", pr, author: "alice", confirmedContributor: true, files, deterministicBand: "low" });
     expect(noSha.findings).toEqual([]);
     expect(run).not.toHaveBeenCalled();
   });
@@ -278,6 +296,7 @@ describe("runAiSlopForAdvisory (processor wiring)", () => {
       repoFullName: "acme/widgets",
       pr,
       author: "alice",
+      confirmedContributor: true,
       files,
       deterministicBand: "clean",
     });
@@ -287,7 +306,7 @@ describe("runAiSlopForAdvisory (processor wiring)", () => {
   it("is fail-safe: a thrown error (broken DB) yields no finding and never throws", async () => {
     const adv = advisory();
     const env = { ...enabledEnv(async () => ({ response: slopJson() })), DB: undefined } as unknown as Env;
-    await expect(runAiSlopForAdvisory(env, { advisory: adv, repoFullName: "acme/widgets", pr, author: "alice", files, deterministicBand: "high" })).resolves.toBeUndefined();
+    await expect(runAiSlopForAdvisory(env, { advisory: adv, repoFullName: "acme/widgets", pr, author: "alice", confirmedContributor: true, files, deterministicBand: "high" })).resolves.toBeUndefined();
     expect(adv.findings).toEqual([]);
   });
 });
