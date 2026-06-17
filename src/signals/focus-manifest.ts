@@ -54,6 +54,7 @@ export type FocusManifestSettings = Partial<
     | "duplicatePrGateMode"
     | "qualityGateMode"
     | "qualityGateMinScore"
+    | "reviewerRoutingMode"
     | "aiReviewMode"
     | "aiReviewByok"
     | "aiReviewProvider"
@@ -411,6 +412,10 @@ function parseSettingsOverride(value: JsonValue | undefined, warnings: string[])
   if (qualityGateMode !== null) out.qualityGateMode = qualityGateMode;
   const qualityGateMinScore = normalizeOptionalScore(r.qualityGateMinScore, "settings.qualityGateMinScore", warnings);
   if (qualityGateMinScore !== null) out.qualityGateMinScore = qualityGateMinScore;
+  // Reviewer routing (#540) is off | advisory only (not a gate mode) — parse it as a plain enum so
+  // `.gittensory.yml settings: { reviewerRoutingMode: advisory }` carries through resolveEffectiveSettings.
+  const reviewerRoutingMode = normalizeOptionalEnum(r.reviewerRoutingMode, "settings.reviewerRoutingMode", ["off", "advisory"] as const, warnings);
+  if (reviewerRoutingMode !== null) out.reviewerRoutingMode = reviewerRoutingMode;
   const aiReviewMode = normalizeOptionalGateMode(r.aiReviewMode, "settings.aiReviewMode", warnings);
   if (aiReviewMode !== null) out.aiReviewMode = aiReviewMode;
   const aiReviewProvider = normalizeOptionalEnum(r.aiReviewProvider, "settings.aiReviewProvider", ["anthropic", "openai"] as const, warnings);

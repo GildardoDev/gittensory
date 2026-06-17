@@ -415,6 +415,11 @@ export type RepositorySettings = {
   slopGateMode: GateRuleMode;
   /** Merge-readiness gate (#merge-readiness). `off`/`advisory`/`block`. No min-score. Default `off`. */
   mergeReadinessGateMode: GateRuleMode;
+  /** Advisory reviewer routing (#540). `off` = no routing; `advisory` = suggest reviewers from the repo's
+   *  CODEOWNERS for the PR's changed files, ranked and de-weighted by each owner's current load, surfaced in
+   *  the maintainer-private PR panel only. NOT a gate (never blocks). A TEXT column so a later follow-up can
+   *  add an `auto_request` mode (actually requesting reviewers on GitHub) without a migration. Default `off`. */
+  reviewerRoutingMode: "off" | "advisory";
   /** Focus-manifest policy gate (#555). When `block`, the focus manifest's declared policy (blocked paths,
    *  required-linked-issue, test expectations) becomes an enforceable `Gittensory Gate` blocker. An
    *  INDEPENDENT dimension, deliberately not folded into the merge-readiness composite. Default `off` — opt-in. */

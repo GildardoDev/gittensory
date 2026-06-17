@@ -140,6 +140,8 @@ import { runGittensoryAiSlopAdvisory } from "../services/ai-slop";
 import { decidePublicSurface } from "../signals/settings-preview";
 import { loadRepoFocusManifest } from "../signals/focus-manifest-loader";
 import { buildFocusManifestGuidance, resolveEffectiveSettings } from "../signals/focus-manifest";
+import { loadRepoCodeowners } from "../github/codeowners";
+import { buildReviewerRouting, type ReviewerRouting } from "../signals/reviewer-routing";
 import type { LocalBranchAnalysisInput } from "../signals/local-branch";
 import { runGittensoryAiReview } from "../services/ai-review";
 import type { AdvisoryFinding, ContributorEvidenceRecord, DetectedNotificationEvent, GitHubWebhookPayload, JobMessage, JsonValue, PullRequestRecord, RepositorySettings } from "../types";
@@ -1178,6 +1180,7 @@ async function maybePublishPrPublicSurface(
   let preflight!: ReturnType<typeof buildPreflightResult>;
   let gateEvaluation: ReturnType<typeof evaluateGateCheck> | undefined;
   let aiReview: { notes: string } | undefined;
+  let reviewerRouting: ReviewerRouting | undefined;
   let gateFinalized = false;
   try {
     const [repoIssues, repoPullRequests, repoBounties] = await Promise.all([
@@ -1229,7 +1232,7 @@ async function maybePublishPrPublicSurface(
     // Slop (#530) and focus-manifest-policy (#555) gates both need the PR's changed files. Load ONCE and
     // share so two opted-in gates don't double-fetch; the load is lazy so a repo with both off pays nothing.
     let gateFiles: Awaited<ReturnType<typeof listPullRequestFiles>> | null = null;
-    if (settings.slopGateMode !== "off" || settings.manifestPolicyGateMode !== "off") {
+    if (settings.slopGateMode !== "off" || settings.manifestPolicyGateMode !== "off" || settings.reviewerRoutingMode !== "off") {
       gateFiles = await listPullRequestFiles(env, repoFullName, pr.number);
     }
     if (settings.slopGateMode !== "off") {
@@ -1275,6 +1278,24 @@ async function maybePublishPrPublicSurface(
           ...(finding.action !== undefined ? { action: finding.action } : {}),
         });
       }
+    }
+
+    // Advisory reviewer routing (#540, opt-in via reviewerRoutingMode). Suggest reviewers from the repo's
+    // CODEOWNERS for the PR's changed files, ranked and de-weighted by each owner's authored-open-PR load.
+    // Advisory ONLY — never feeds the gate (it is not a blocker). Reuses the already-fetched gateFiles when
+    // present so an opted-in repo with slop/manifest off still only fetches files once. A CODEOWNERS fetch
+    // failure returns []; the routing simply has no suggestions. Public-safe: only logins (public repo
+    // metadata), file counts, and a coarse load band — no trust/credibility/reward fields for any reviewer.
+    if (settings.reviewerRoutingMode !== "off") {
+      const routingFiles = gateFiles ?? [];
+      const rules = await loadRepoCodeowners(env, repoFullName).catch(() => []);
+      reviewerRouting = buildReviewerRouting({
+        rules,
+        changedPaths: routingFiles.map((file) => file.path),
+        openPullRequests: repoPullRequests.filter((candidate) => candidate.state === "open"),
+        authorLogin: author,
+        burdenForecast: null,
+      });
     }
 
     // AI maintainer review (opt-in via aiReviewMode). Mutates `advisory` with a consensus defect (if any)
@@ -1398,7 +1419,7 @@ async function maybePublishPrPublicSurface(
     // Maintainer review-content overrides from `.gittensory.yml` (footer text, row toggles, intro note).
     // Cached, so this is a DB read after the settings resolution already loaded the manifest.
     const reviewConfig = (await loadRepoFocusManifest(env, repoFullName)).review;
-    const commentArgs = { repo, pr, profile, detection, queueHealth, collisions, preflight, settings, gate: gateEvaluation, review: reviewConfig, aiReview };
+    const commentArgs = { repo, pr, profile, detection, queueHealth, collisions, preflight, settings, gate: gateEvaluation, review: reviewConfig, aiReview, reviewerRouting };
     const deterministicBody = buildPublicPrIntelligenceComment(commentArgs);
     try {
       await createOrUpdatePrIntelligenceComment(env, installationId, repoFullName, pr.number, deterministicBody);

@@ -22,6 +22,7 @@ import type {
 import type { PublicContributorProfile } from "../github/public";
 import { gittensoryFooter, gittensorRepoEarnUrl } from "../github/footer";
 import type { FocusManifestReviewConfig, ReviewFieldKey } from "./focus-manifest";
+import type { ReviewerRouting } from "./reviewer-routing";
 import type { GittensorContributorSnapshot } from "../gittensor/api";
 import { nowIso } from "../utils/json";
 import { sanitizePublicComment } from "../queue-intelligence";
@@ -3921,6 +3922,9 @@ export function buildPublicPrIntelligenceComment(args: {
   review?: FocusManifestReviewConfig | undefined;
   /** Optional AI maintainer-review notes (already public-safe). Rendered as an advisory section. */
   aiReview?: { notes: string } | undefined;
+  /** Optional advisory reviewer routing (#540) from CODEOWNERS. Public-safe (logins + load band only);
+   *  rendered as a short "Suggested reviewers" section. Never a gate signal. */
+  reviewerRouting?: ReviewerRouting | undefined;
 }): string {
   const publicFindings = args.preflight.findings
     .filter((finding) => finding.severity !== "critical")
@@ -4092,6 +4096,31 @@ export function buildPublicPrIntelligenceComment(args: {
           // stray tag (e.g. </details> or an HTML comment marker) cannot break the panel structure, while
           // preserving the markdown bullet/line layout that sanitizePanelText would otherwise flatten.
           args.aiReview.notes.replace(/[<>]/g, (char) => (char === "<" ? "&lt;" : "&gt;")).slice(0, 4000),
+          "",
+          "</details>",
+        ]
+      : []),
+    // Optional advisory reviewer routing (#540). Maintainer-facing suggestion of CODEOWNERS reviewers for
+    // the changed files, ranked and de-weighted by current load. Public-safe: logins (public repo metadata)
+    // + a coarse load band only — never any trust/credibility/reward/score for a reviewer, and never a gate.
+    ...(args.reviewerRouting && (args.reviewerRouting.suggestions.length > 0 || args.reviewerRouting.teams.length > 0)
+      ? [
+          "",
+          "<details>",
+          "<summary>Suggested reviewers (advisory)</summary>",
+          "",
+          `_${sanitizePanelText(args.reviewerRouting.summary)} From CODEOWNERS; advisory only — gittensory does not request reviewers._`,
+          ...(args.reviewerRouting.suggestions.length > 0
+            ? [
+                "",
+                ...args.reviewerRouting.suggestions.map(
+                  (suggestion) => `- \`${sanitizePanelText(suggestion.login)}\` — owns ${suggestion.matchedFileCount} changed file(s), load: ${suggestion.loadBand}.`,
+                ),
+              ]
+            : []),
+          ...(args.reviewerRouting.teams.length > 0
+            ? ["", `Teams: ${args.reviewerRouting.teams.map((team) => `\`${sanitizePanelText(team)}\``).join(", ")}.`]
+            : []),
           "",
           "</details>",
         ]

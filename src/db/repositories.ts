@@ -404,6 +404,7 @@ export async function getRepositorySettings(env: Env, fullName: string): Promise
       qualityGateMinScore: null,
       slopGateMode: "off",
       mergeReadinessGateMode: "off",
+      reviewerRoutingMode: "off",
       manifestPolicyGateMode: "off",
       firstTimeContributorGrace: false,
       slopGateMinScore: null,
@@ -439,6 +440,7 @@ export async function getRepositorySettings(env: Env, fullName: string): Promise
     qualityGateMinScore: normalizeQualityGateMinScore(row.qualityGateMinScore),
     slopGateMode: parseGateRuleMode(row.slopGateMode),
     mergeReadinessGateMode: parseGateRuleMode(row.mergeReadinessGateMode),
+    reviewerRoutingMode: parseReviewerRoutingMode(row.reviewerRoutingMode),
     manifestPolicyGateMode: parseGateRuleMode(row.manifestPolicyGateMode),
     firstTimeContributorGrace: row.firstTimeContributorGrace,
     slopGateMinScore: normalizeQualityGateMinScore(row.slopGateMinScore),
@@ -478,6 +480,7 @@ export async function upsertRepositorySettings(env: Env, settings: Partial<Repos
     qualityGateMinScore: normalizeQualityGateMinScore(settings.qualityGateMinScore),
     slopGateMode: settings.slopGateMode ?? "off",
     mergeReadinessGateMode: settings.mergeReadinessGateMode ?? "off",
+    reviewerRoutingMode: settings.reviewerRoutingMode ?? "off",
     manifestPolicyGateMode: settings.manifestPolicyGateMode ?? "off",
     firstTimeContributorGrace: settings.firstTimeContributorGrace ?? false,
     slopGateMinScore: normalizeQualityGateMinScore(settings.slopGateMinScore),
@@ -515,6 +518,7 @@ export async function upsertRepositorySettings(env: Env, settings: Partial<Repos
       qualityGateMinScore: resolved.qualityGateMinScore,
       slopGateMode: resolved.slopGateMode,
       mergeReadinessGateMode: resolved.mergeReadinessGateMode,
+      reviewerRoutingMode: resolved.reviewerRoutingMode,
       manifestPolicyGateMode: resolved.manifestPolicyGateMode,
       firstTimeContributorGrace: resolved.firstTimeContributorGrace,
       slopGateMinScore: resolved.slopGateMinScore,
@@ -553,6 +557,7 @@ export async function upsertRepositorySettings(env: Env, settings: Partial<Repos
         // persist on update of an existing row. Restored here alongside the new slopAiAdvisory field.
         slopGateMode: resolved.slopGateMode,
         mergeReadinessGateMode: resolved.mergeReadinessGateMode,
+        reviewerRoutingMode: resolved.reviewerRoutingMode,
         manifestPolicyGateMode: resolved.manifestPolicyGateMode,
         firstTimeContributorGrace: resolved.firstTimeContributorGrace,
         slopGateMinScore: resolved.slopGateMinScore,
@@ -4941,6 +4946,13 @@ function parseGatePack(value: string | null | undefined): RepositorySettings["ga
 function parseGateRuleMode(value: string): RepositorySettings["linkedIssueGateMode"] {
   if (value === "off" || value === "block") return value;
   return "advisory";
+}
+
+// Reviewer routing (#540) is NOT a gate: only off | advisory today. A TEXT column, so the eventual
+// `auto_request` follow-up adds its value here (and the action) without a migration. Any unrecognized
+// value (including a future "auto_request" not yet implemented) parses to the safe "off".
+function parseReviewerRoutingMode(value: string): RepositorySettings["reviewerRoutingMode"] {
+  return value === "advisory" ? "advisory" : "off";
 }
 
 function normalizeAiReviewProvider(value: string | null | undefined): "anthropic" | "openai" | null {

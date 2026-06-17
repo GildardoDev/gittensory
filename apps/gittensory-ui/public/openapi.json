@@ -8025,6 +8025,13 @@
               "advisory",
               "block"
             ]
+          },
+          "reviewerRoutingMode": {
+            "type": "string",
+            "enum": [
+              "off",
+              "advisory"
+            ]
           }
         },
         "required": [
@@ -8041,6 +8048,7 @@
           "qualityGateMode",
           "slopGateMode",
           "mergeReadinessGateMode",
+          "reviewerRoutingMode",
           "manifestPolicyGateMode",
           "firstTimeContributorGrace",
           "slopAiAdvisory",
@@ -8641,6 +8649,13 @@
                   "advisory",
                   "block"
                 ]
+              },
+              "reviewerRoutingMode": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "advisory"
+                ]
               }
             },
             "required": [
@@ -8657,6 +8672,7 @@
               "qualityGateMode",
               "slopGateMode",
               "mergeReadinessGateMode",
+              "reviewerRoutingMode",
               "manifestPolicyGateMode",
               "firstTimeContributorGrace",
               "autoLabelEnabled",
