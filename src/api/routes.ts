@@ -1503,7 +1503,7 @@ export function createApp() {
     const privateBlockers = buildExtensionPrivateBlockers(reviewability);
     await recordAuditEvent(c.env, {
       eventType: "extension.pull_context_view",
-      actor: contributor ?? "unknown",
+      actor: identity.actor,
       route: c.req.path,
       outcome: "success",
       metadata: {
