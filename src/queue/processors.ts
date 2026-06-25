@@ -179,7 +179,7 @@ import { resolveRepositorySettings } from "../settings/repository-settings";
 import type { LocalBranchAnalysisInput } from "../signals/local-branch";
 import { runGittensoryAiReview } from "../services/ai-review";
 import { secretLeakFinding } from "../review/safety";
-import { aiCiRefutationActive, buildReviewGroundingText, checkSummaryText as checkFailureSummaryText, isGroundingEnabled } from "../review/grounding-wire";
+import { buildReviewGroundingText, checkSummaryText as checkFailureSummaryText, isGroundingEnabled } from "../review/grounding-wire";
 import { buildReviewRagContext, isRagEnabled } from "../review/rag-wire";
 import { indexRepo, reindexChangedPaths } from "../review/rag-index";
 import { isReputationEnabled, recordReputationOutcome, shouldSkipAiForReputation } from "../review/reputation-wire";
@@ -788,15 +788,6 @@ async function maybeRunAgentMaintenance(
   const planned = planAgentMaintenanceActions({
     conclusion: gate.conclusion,
     blockerTitles: gate.blockers.map((blocker) => blocker.title),
-    // CI-refutation (#ai-ci-refutation): thread the blocker CODES + the active gate so the planner suppresses an
-    // AI-judgment-only failure (ai_consensus_defect / ai_review_split) on a green-CI PR — the deterministic
-    // validator overrules the model hallucination, so a clean+green PR MERGES instead of being false-closed.
-    // `aiCiRefutationEnabled` is the SAME grounding+convergence gate the public-comment reconciliation uses, passed
-    // as a single boolean so the refutation condition is unit-tested in the planner and this site carries no branch.
-    // Enabled=false (non-convergence / grounding-off) ⇒ the refutation is a no-op ⇒ byte-identical verdict. The
-    // codes are public-safe finding identifiers (no rubric/scoring/reward terms).
-    gateBlockerCodes: gate.blockers.map((blocker) => blocker.code),
-    aiCiRefutationEnabled: aiCiRefutationActive(env, repoFullName),
     autonomy: settings.autonomy,
     autoMaintain: settings.autoMaintain,
     slopGateMinScore: settings.slopGateMinScore,
@@ -2743,13 +2734,9 @@ async function maybePublishPrPublicSurface(
         ...(failingDetails.length > 0 ? { failingChecks: failingDetails.map((detail) => detail.name) } : {}),
         ...(failingDetails.length > 0 ? { failingDetails } : {}),
       };
-      // CI-refutation for the PUBLIC comment (#ai-ci-refutation): when the gate FAILED solely on an AI-judgment
-      // blocker but the LIVE CI is GREEN, render the comment (headline + Gate panel row) as SUCCESS/advisory so it
-      // MATCHES the disposition (which merges such a PR) instead of a contradictory red "blocked/closed". Uses the
-      // SAME grounding+convergence gate as the disposition refutation (a single `aiCiRefutationActive` call so this
-      // site carries no branch), built AFTER the live CI is resolved and used for BOTH the panel rows and the
-      // comment body so the two never disagree. Gate OFF ⇒ commentGate === gateEvaluation (byte-identical comment).
-      const commentGate = reconcileGateEvaluationForGreenCi(gateEvaluation, ciState, aiCiRefutationActive(env, repoFullName));
+      // Keep the public comment aligned with the action planner: a maintainer-configured AI-review hard blocker
+      // remains a visible gate failure even when CI is green.
+      const commentGate = reconcileGateEvaluationForGreenCi(gateEvaluation, ciState, false);
       const { rows, readinessTotal } = buildPublicPrPanelSignalRows({ repo, pr, profile, detection, queueHealth, collisions, preflight, settings, gate: commentGate, duplicateWinnerEnabled });
       // Visual before/after capture (visual-capture port). Fires ONLY when (1) the global flag + per-repo
       // cutover gate both allow it (screenshotsAllowed) AND (2) the PR touches WEB-VISIBLE files (isVisualPath

@@ -1078,7 +1078,7 @@ describe("firstAddedLineFromPatch", () => {
     });
   });
 
-describe("CI-refutation of the public comment gate (#ai-ci-refutation)", () => {
+describe("AI-review public comment gate preservation", () => {
   const finding = (code: string): import("../../src/types").AdvisoryFinding => ({ code, severity: "critical", title: `t:${code}`, detail: `d:${code}` });
   const failure = (codes: string[]): import("../../src/rules/advisory").GateCheckEvaluation => ({
     enabled: true,
@@ -1102,16 +1102,15 @@ describe("CI-refutation of the public comment gate (#ai-ci-refutation)", () => {
     expect(isAiJudgmentOnlyFailure({ ...failure(["ai_consensus_defect"]), conclusion: "success" })).toBe(false);
   });
 
-  it("enabled + green CI + AI-judgment-only failure → SUCCESS with cleared blockers (matches the merge disposition)", () => {
-    const out = reconcileGateEvaluationForGreenCi(failure(["ai_consensus_defect"]), "passed", true);
-    expect(out.conclusion).toBe("success");
-    expect(out.blockers).toEqual([]);
-    expect(out.title).toBe("Gittensory Gate passed");
-    expect(out.summary).toContain("advisory, not blocking");
+  it("keeps an AI-judgment-only failure unchanged even when CI is green and the former flag is enabled", () => {
+    const fail = failure(["ai_consensus_defect"]);
+    expect(reconcileGateEvaluationForGreenCi(fail, "passed", true)).toBe(fail);
+    expect(reconcileGateEvaluationForGreenCi(fail, "passed", true).conclusion).toBe("failure");
   });
 
-  it("enabled + green CI + split-only failure → SUCCESS too", () => {
-    expect(reconcileGateEvaluationForGreenCi(failure(["ai_review_split"]), "passed", true).conclusion).toBe("success");
+  it("keeps a review-split failure unchanged too", () => {
+    const fail = failure(["ai_review_split"]);
+    expect(reconcileGateEvaluationForGreenCi(fail, "passed", true)).toBe(fail);
   });
 
   it("is GATED by `enabled` — enabled=false returns the failure UNCHANGED even on green CI", () => {
