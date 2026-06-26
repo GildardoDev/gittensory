@@ -438,15 +438,21 @@ const INLINE_FINDINGS_SUFFIX =
   '\n\nINLINE FINDINGS: ALSO include an additional top-level field "inlineFindings" in the SAME JSON object — an array (possibly empty) of your most important findings, each anchored to a specific changed line, for inline PR comments. Each item: {"path": the changed file path EXACTLY as shown in the diff, "line": the 1-based line number in the NEW file (count forward from the "+" start in the nearest "@@ -old +new @@" hunk header) of an ADDED ("+") line you are commenting on, "severity": "blocker" or "nit", "body": the one-sentence finding}. Include ONLY findings you can place on a specific added line; OMIT any you cannot anchor precisely (a wrong line is worse than none). At most ~10 items.';
 
 /** The effective reviewer SYSTEM prompt. Appends the grounding-discipline suffix when the caller supplied one
- *  (flag GITTENSORY_REVIEW_GROUNDING on), the `review.profile` tone suffix when set, then the inline-findings
- *  instruction when the caller asked for them; all absent (default) → the base prompt, byte-identical to today. */
-function buildSystemPrompt(input: GittensoryAiReviewInput): string {
+ *  (flag GITTENSORY_REVIEW_GROUNDING on), the `review.profile` tone suffix when set (unless `options.includeProfile`
+ *  is false — the consensus-defect path opts out so a presentation-only knob never reaches the gate, #review-profile),
+ *  then the inline-findings instruction when the caller asked for them; all absent (default) → the base prompt,
+ *  byte-identical to today. */
+function buildSystemPrompt(
+  input: GittensoryAiReviewInput,
+  options: { includeProfile?: boolean } = {},
+): string {
   const groundingSuffix = input.grounding?.systemSuffix ?? "";
   // Review-enrichment brief (#1472): the REES supplies a one-line discipline suffix ("treat a listed CVE/secret as
   // verified ground truth"). Absent (default) ⇒ "" ⇒ byte-identical.
   const enrichmentSuffix = input.enrichment?.systemSuffix ?? "";
   const profileSuffix =
-    input.profile === "chill" || input.profile === "assertive"
+    options.includeProfile !== false &&
+    (input.profile === "chill" || input.profile === "assertive")
       ? REVIEW_PROFILE_SUFFIX[input.profile]
       : "";
   // `.gittensory.yml` review.path_instructions (#review-path-instructions): the caller pre-resolved the entries
@@ -802,7 +808,18 @@ export async function runGittensoryAiReview(
   // Grounding-discipline SYSTEM suffix (convergence, flag-gated). When the caller supplied grounding, the
   // reviewers are told to verify claims against the attached CI/files; otherwise this is REVIEW_SYSTEM_PROMPT
   // unchanged (byte-identical). Computed from `promptInput` so it travels with the (possibly defanged) input.
-  const system = buildSystemPrompt(promptInput);
+  // `review.profile` (presentation-only) appends a tone suffix to the ADVISORY prompt only; the consensus-defect
+  // path that the gate consumes uses the profile-free `consensusSystem` (#review-profile). With no profile set the
+  // two prompts are byte-identical, so the non-BYOK advisory leg can still be reused as a consensus opinion.
+  const advisorySystem = buildSystemPrompt(promptInput);
+  const consensusSystem = buildSystemPrompt(promptInput, {
+    includeProfile: false,
+  });
+  // True only when a `review.profile` actually diverges the advisory prompt from the consensus prompt. In that
+  // case the advisory review is profile-tainted and must NOT be reused as a consensus opinion — the consensus
+  // legs run fresh on `consensusSystem` so the gate never sees the profile tone. Absent profile ⇒ false ⇒ the
+  // historical reuse (no extra free call) is preserved, byte-identical to today.
+  const profileDivergesConsensus = advisorySystem !== consensusSystem;
   // The daily neuron budget governs FREE Workers-AI spend only. BYOK advisory calls bill the maintainer's
   // own provider account, so they are not counted here (and a BYOK advisory still runs when the free
   // budget is exhausted). Free calls = the consensus pair in block mode (always Workers AI), plus the
@@ -833,14 +850,28 @@ export async function runGittensoryAiReview(
     input.combine ?? plan?.combine ?? "consensus";
   const onMerge: OnMerge | null | undefined = input.onMerge ?? plan?.onMerge;
   const dual = combine !== "single" && (!configured || configured.length > 1);
-  const freeAiCalls =
-    (input.mode === "block" ? (dual ? 2 : 1) : 0) + (input.providerKey ? 0 : 1);
-  // Estimate against the EFFECTIVE system prompt (`system`) so grounding's extra context is billed against the
-  // budget. Flag-OFF, `system === REVIEW_SYSTEM_PROMPT`, so the estimate is byte-identical to today.
+  const consensusCalls = input.mode === "block" ? (dual ? 2 : 1) : 0;
+  const advisoryCalls = input.providerKey ? 0 : 1;
+  // Estimate against the EFFECTIVE system prompts (split per #review-profile): the advisory leg is billed against
+  // `advisorySystem` (which may carry the `review.profile` tone suffix) and the block-mode consensus reviewers
+  // against `consensusSystem` (profile-free), so grounding/path/enrichment context is still billed without letting
+  // `review.profile` change consensus accounting. Profile absent ⇒ both prompts are equal and the estimate is
+  // byte-identical to today.
   const estimatedNeurons =
-    freeAiCalls === 0
+    (advisoryCalls === 0
       ? 0
-      : estimateNeurons(system.length + user.length, maxTokens, freeAiCalls);
+      : estimateNeurons(
+          advisorySystem.length + user.length,
+          maxTokens,
+          advisoryCalls,
+        )) +
+    (consensusCalls === 0
+      ? 0
+      : estimateNeurons(
+          consensusSystem.length + user.length,
+          maxTokens,
+          consensusCalls,
+        ));
   // FAIL-SAFE default (#budget-no-starve): the daily neuron budget is a runaway-LOOP backstop, not a normal-
   // operation gate. An absent/empty/non-numeric env var must default HIGH (the clamp max), never to a tiny value
   // that silently starves every dual-AI review into quota_exceeded — that exact misconfig (the deployed worker
@@ -896,7 +927,7 @@ export async function runGittensoryAiReview(
   if (input.providerKey) {
     const outcome = await runProviderReview(
       input.providerKey,
-      system,
+      advisorySystem,
       user,
       maxTokens,
     );
@@ -907,7 +938,7 @@ export async function runGittensoryAiReview(
       env,
       primary.model,
       primaryFallback,
-      system,
+      advisorySystem,
       user,
       maxTokens,
     );
@@ -920,15 +951,17 @@ export async function runGittensoryAiReview(
   if (input.mode === "block") {
     if (dual) {
       // Two independent reviewers (the free Workers-AI pair by default — provider-independent, never BYOK — or the
-      // configured provider pair on self-host). Reuse the advisory leg's review as the first opinion when it
-      // already ran it (non-BYOK), instead of paying for it twice.
+      // configured provider pair on self-host). Both consensus legs run the profile-free `consensusSystem` so
+      // `review.profile` (presentation-only) never reaches the gate-producing path (#review-profile). Reuse the
+      // non-BYOK advisory leg as the first opinion to avoid paying for it twice — BUT only when no `review.profile`
+      // diverged its prompt (else the advisory review is profile-tainted and we run a fresh consensus leg).
       const [a, b] = await Promise.all([
-        input.providerKey
+        input.providerKey || profileDivergesConsensus
           ? runWorkersOpinion(
               env,
               primary.model,
               primaryFallback,
-              system,
+              consensusSystem,
               user,
               maxTokens,
             )
@@ -937,7 +970,7 @@ export async function runGittensoryAiReview(
           env,
           secondary.model,
           secondaryFallback,
-          system,
+          consensusSystem,
           user,
           maxTokens,
         ),
@@ -951,17 +984,20 @@ export async function runGittensoryAiReview(
       aiReviewSplit = combined.split;
       inconclusive = combined.inconclusive;
     } else {
-      // Single reviewer: its verdict IS the decision. Reuse the advisory leg (non-BYOK) or run the one reviewer.
-      const a = input.providerKey
-        ? await runWorkersOpinion(
-            env,
-            primary.model,
-            primaryFallback,
-            system,
-            user,
-            maxTokens,
-          )
-        : advisoryReview;
+      // Single reviewer: its verdict IS the decision. Reuse the advisory leg (non-BYOK, no profile divergence) or
+      // run the one reviewer on the profile-free `consensusSystem` (the gate path never sees `review.profile`,
+      // #review-profile). A diverging profile means the advisory leg is profile-tainted ⇒ run fresh.
+      const a =
+        input.providerKey || profileDivergesConsensus
+          ? await runWorkersOpinion(
+              env,
+              primary.model,
+              primaryFallback,
+              consensusSystem,
+              user,
+              maxTokens,
+            )
+          : advisoryReview;
       const combined = combineReviews([a], { strategy: "single" });
       consensusDefect = combined.defect;
       inconclusive = combined.inconclusive;

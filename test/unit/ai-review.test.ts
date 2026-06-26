@@ -301,6 +301,56 @@ describe("review.profile shapes the reviewer system prompt (#review-profile)", (
     expect(withNull).toBe(without);
   });
 
+  it("keeps review.profile out of block-mode consensus prompts (regression for review-profile gate coupling)", async () => {
+    const systemPromptAt = (
+      run: ReturnType<typeof vi.fn>,
+      index: number,
+    ): string =>
+      (
+        run.mock.calls[index]?.[1] as
+          | { messages?: Array<{ content?: string }> }
+          | undefined
+      )?.messages?.[0]?.content ?? "";
+    // The model "promotes" an advisory-only nit to a blocker ONLY when the ASSERTIVE tone reaches it. If the
+    // profile leaks into a consensus prompt, that consensus leg would block — the gate must never see it.
+    const run = vi.fn(
+      async (
+        _model: string,
+        options: { messages: Array<{ content: string }> },
+      ) => ({
+        response: options.messages[0]?.content.includes("ASSERTIVE")
+          ? reviewJson({
+              blockers: ["Assertive-only advisory nit promoted by the prompt."],
+            })
+          : reviewJson({ blockers: [] }),
+      }),
+    );
+    const env = createTestEnv({
+      AI: { run } as unknown as Ai,
+      AI_SUMMARIES_ENABLED: "true",
+      AI_PUBLIC_COMMENTS_ENABLED: "true",
+      AI_DAILY_NEURON_BUDGET: "100000",
+    });
+
+    const result = await runGittensoryAiReview(env, {
+      ...baseInput,
+      mode: "block",
+      profile: "assertive",
+    });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    // The profile tone reached ONLY the advisory leg, so its blocker stays advisory and no consensus defect fires.
+    expect(result.consensusDefect).toBeNull();
+    expect(result.advisoryNotes).toContain("Assertive-only advisory nit");
+    // Advisory leg (profile-tainted) is NOT reused for consensus when a profile diverges → 1 advisory + 2 fresh
+    // profile-free consensus legs = 3 calls. Call 0 carries the tone; calls 1 and 2 (the gate path) never do.
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(systemPromptAt(run, 0)).toContain("ASSERTIVE");
+    expect(systemPromptAt(run, 1)).not.toMatch(/CHILL|ASSERTIVE/);
+    expect(systemPromptAt(run, 2)).not.toMatch(/CHILL|ASSERTIVE/);
+  });
+
   it("pathGuidance is appended to the system prompt; empty/absent leaves it byte-identical (#review-path-instructions)", async () => {
     const systemPromptOf = (run: ReturnType<typeof vi.fn>): string =>
       (run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })
