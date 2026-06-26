@@ -39,6 +39,14 @@ describe("resolveOverrideHeadSha (#16 / gate-override stale head)", () => {
     expect(mockedToken).toHaveBeenCalledWith(env, 123);
   });
 
+  it("does not mark stale when the cached head is absent (null), even if a live head exists", async () => {
+    const env = createTestEnv();
+    mockedToken.mockResolvedValue("inst-tok");
+    stubLiveHead("live-sha");
+    // pr.headSha is null → the `pr.headSha` arm short-circuits; there is nothing the maintainer approved to neutralize.
+    expect(await resolveOverrideHeadSha(env, 123, "owner/repo", makePr(null))).toEqual({ headSha: null, stale: false, liveHeadSha: "live-sha" });
+  });
+
   it("marks the command stale when the live head differs from the cached head", async () => {
     const env = createTestEnv({ GITHUB_PUBLIC_TOKEN: "public-tok" });
     mockedToken.mockRejectedValue(new Error("no app key"));
