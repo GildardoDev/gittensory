@@ -3249,8 +3249,9 @@ async function maybeProcessGateOverrideCommand(env: Env, deliveryId: string, pay
     await recordGateOverrideSkip(env, deliveryId, repoFullName, `${repoFullName}#${pr.number}`, actor, "stale_pr_head");
     return true;
   }
-  const prAtResolvedHead = headResolution.headSha === pr.headSha ? pr : { ...pr, headSha: headResolution.headSha };
-  const { advisory } = await buildAuthorizedPrActionAdvisory(env, repoFullName, prAtResolvedHead, settings);
+  // Not stale (the stale case returned above), and resolveOverrideHeadSha returns the cached head (pr.headSha)
+  // in that case — so the override acts on `pr` directly; there is no other head to substitute.
+  const { advisory } = await buildAuthorizedPrActionAdvisory(env, repoFullName, pr, settings);
   const safeReason = sanitizePublicComment((command.reason ?? "").trim() || "No reason provided.");
   await createOrUpdateOverriddenGateCheckRun(env, installationId, repoFullName, advisory, { actor, reason: safeReason });
   await recordAuditEvent(env, {
