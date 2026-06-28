@@ -5973,6 +5973,26 @@ async function maybeProcessPrPanelRetrigger(
   ) {
     await refreshPullRequestDetails(env, repoFullName, pr.number);
   }
+  if (
+    !(await prReadyForReview(
+      env,
+      installationId,
+      repoFullName,
+      pr,
+      settings,
+      deliveryId,
+    ))
+  ) {
+    await recordAuditEvent(env, {
+      eventType: "github_app.pr_panel_retrigger_deferred",
+      actor,
+      targetKey: `${repoFullName}#${pr.number}`,
+      outcome: "queued",
+      detail: "manual panel retrigger deferred until CI finishes",
+      metadata: { deliveryId, repoFullName, commentId: comment.id },
+    }).catch(() => undefined);
+    return true;
+  }
   await maybePublishPrPublicSurface(
     env,
     installationId,

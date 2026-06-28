@@ -3499,6 +3499,81 @@ describe("queue processors", () => {
     expect(usageEvents).toEqual(expect.arrayContaining([expect.objectContaining({ surface: "github_app", eventName: "pr_panel_retriggered", outcome: "completed" })]));
   });
 
+  it("defers a manual panel rerun while CI is still running", async () => {
+    const env = createTestEnv({ GITHUB_APP_PRIVATE_KEY: await generatePrivateKeyPem() });
+    await upsertRepositoryFromGitHub(env, { name: "gittensory", full_name: "JSONbored/gittensory", private: false, owner: { login: "JSONbored" } }, 123);
+    await upsertRepositorySettings(env, {
+      repoFullName: "JSONbored/gittensory",
+      commentMode: "all_prs",
+      publicSurface: "comment_only",
+      autoLabelEnabled: false,
+      checkRunMode: "off",
+      gateCheckMode: "enabled",
+      includeMaintainerAuthors: true,
+      autonomy: { merge: "auto" },
+      commandAuthorization: { default: ["maintainer"], commands: { "review-now": ["maintainer"] } },
+    });
+    await upsertPullRequestFromGitHub(env, "JSONbored/gittensory", {
+      number: 46,
+      title: "Pending CI rerun",
+      state: "open",
+      user: { login: "contributor" },
+      author_association: "CONTRIBUTOR",
+      head: { sha: "pendingci" },
+      base: { ref: "main" },
+      labels: [],
+      body: "Validation: npm test",
+    });
+    const checkedPanel = [
+      "<!-- gittensory-pr-panel:v1 -->",
+      "",
+      "- [x] <!-- gittensory-rerun-review:v1 --> Re-run Gittensory review",
+    ].join("\n");
+    let commentPatches = 0;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      const method = init?.method ?? "GET";
+      if (url === "https://api.gittensor.io/miners") return Response.json([]);
+      if (url.includes("/access_tokens")) return Response.json({ token: "installation-token" });
+      if (url.includes("/collaborators/maintainer/permission")) return Response.json({ permission: "maintain" });
+      if (/\/pulls\/46(?:\?|$)/.test(url)) return Response.json({ number: 46, mergeable_state: "clean" });
+      if (url.includes("/commits/pendingci/check-runs")) {
+        return Response.json({ check_runs: [{ name: "test", status: "in_progress", conclusion: null, app: { slug: "github-actions" } }] });
+      }
+      if (url.includes("/commits/pendingci/status")) return Response.json({ statuses: [] });
+      if (url.includes("/issues/comments/778") && method === "PATCH") {
+        commentPatches += 1;
+        return Response.json({ id: 778 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    await processJob(env, {
+      type: "github-webhook",
+      deliveryId: "panel-retrigger-ci-pending",
+      eventName: "issue_comment",
+      payload: {
+        action: "edited",
+        installation: { id: 123, account: { login: "JSONbored", id: 1, type: "User" } },
+        repository: { name: "gittensory", full_name: "JSONbored/gittensory", private: false, owner: { login: "JSONbored" } },
+        issue: { number: 46, title: "Pending CI rerun", state: "open", user: { login: "contributor" }, pull_request: {} },
+        comment: { id: 778, body: checkedPanel, user: { login: "gittensory[bot]", type: "Bot" } },
+        sender: { login: "maintainer", type: "User" },
+      },
+    });
+
+    expect(commentPatches).toBe(0);
+    const audit = await env.DB.prepare("select event_type, actor, target_key, outcome from audit_events where event_type = ?")
+      .bind("github_app.pr_panel_retrigger_deferred")
+      .first<{ event_type: string; actor: string; target_key: string; outcome: string }>();
+    expect(audit).toMatchObject({
+      event_type: "github_app.pr_panel_retrigger_deferred",
+      actor: "maintainer",
+      target_key: "JSONbored/gittensory#46",
+      outcome: "queued",
+    });
+  });
+
   it("refreshes the PR's files on a manual rerun so the slop/manifest gate evaluates the current diff", async () => {
     const env = createTestEnv({ GITHUB_APP_PRIVATE_KEY: await generatePrivateKeyPem() });
     await upsertRepositoryFromGitHub(env, { name: "gittensory", full_name: "JSONbored/gittensory", private: false, owner: { login: "JSONbored" } }, 123);
