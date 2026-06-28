@@ -78,7 +78,7 @@
       "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
       "fieldConfig": { "defaults": { "color": { "mode": "fixed", "fixedColor": "purple" }, "unit": "short" }, "overrides": [] },
       "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
-      "targets": [{ "datasource": { "type": "frser-sqlite-datasource", "uid": "gittensory-db" }, "refId": "A", "queryType": "table", "queryText": "SELECT count(*) AS ignored FROM review_targets WHERE status='ignored'", "rawQueryText": "SELECT count(*) AS ignored FROM review_targets WHERE status='ignored'" }]
+      "targets": [{ "datasource": { "type": "frser-sqlite-datasource", "uid": "gittensory-db" }, "refId": "A", "queryType": "table", "queryText": "SELECT count(*) AS ignored FROM review_targets WHERE status='ignored' OR verdict='ignore'", "rawQueryText": "SELECT count(*) AS ignored FROM review_targets WHERE status='ignored' OR verdict='ignore'" }]
     },
     {
       "type": "table",

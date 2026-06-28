@@ -479,16 +479,20 @@ export function createClaudeCodeAi(parentEnv: Record<string, string | undefined>
       const claudeModel = resolveModel(configuredClaudeModel(parentEnv), model, "claude-sonnet-4-6");
       const effort = resolveEffort(firstConfigured(parentEnv.CLAUDE_AI_EFFORT));
       const timeoutMs = resolveClaudeCliTimeoutMs(parentEnv);
+      let attempted = false;
+      let stdoutForMetrics = "";
       try {
         if (!token) throw new Error("claude_code_no_oauth_token");
         const env = subscriptionCliEnv(parentEnv, { CLAUDE_CODE_OAUTH_TOKEN: token });
         const prompt = toMessages(options).map((m) => m.content).join("\n\n");
         const spawn = spawnImpl ?? (await defaultSpawn());
+        attempted = true;
         const { stdout, code, stderr } = await spawn(
           "claude",
           ["--print", "--output-format", "json", "--model", claudeModel, "--permission-mode", "plan", "--effort", effort, "--disallowedTools", "Bash,Edit,Write,WebFetch,WebSearch"],
           { env, input: prompt, timeoutMs, cwd: await isolatedCliCwd() },
         );
+        stdoutForMetrics = stdout;
         // Surface the STRUCTURED error envelope FIRST. `claude --output-format json` reports API/auth/model errors in its
         // stdout JSON ({is_error,api_error_status}) on a NON-ZERO exit too — e.g. an unknown model exits 1 with the 404
         // envelope in stdout and EMPTY stderr. Checking it before the exit code turns an opaque `claude_code_exit_1: `
@@ -499,11 +503,12 @@ export function createClaudeCodeAi(parentEnv: Record<string, string | undefined>
         if (code !== 0) throw new Error(`claude_code_exit_${code ?? "null"}: ${redactSecrets(stderr ?? "", [token]).slice(0, 500)}`);
         const text = extractCliText(stdout);
         if (!text) throw new Error("claude_code_empty_output");
-        recordCliUsageMetrics("claude-code", claudeModel, effort, stdout);
         return { response: text };
       } catch (error) {
         logSelfHostAiProviderFailed({ provider: "claude-code", model: claudeModel, effort, timeoutMs, error, knownSecrets: token ? [token] : [] });
         throw error;
+      } finally {
+        if (attempted) recordCliUsageMetrics("claude-code", claudeModel, effort, stdoutForMetrics);
       }
     },
   };
@@ -522,6 +527,8 @@ export function createCodexAi(parentEnv: Record<string, string | undefined>, spa
       const codexModel = resolveModel(configuredCodexModel(parentEnv), model, "");
       const effort = resolveCodexEffort(firstConfigured(parentEnv.CODEX_AI_EFFORT));
       const timeoutMs = resolveCodexCliTimeoutMs(parentEnv);
+      let attempted = false;
+      let stdoutForMetrics = "";
       try {
         assertCodexCredentialIsolation(parentEnv);
         const env = codexCliEnv(parentEnv);
@@ -530,6 +537,7 @@ export function createCodexAi(parentEnv: Record<string, string | undefined>, spa
         const args = ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only"];
         if (codexModel) args.push("--model", codexModel);
         args.push("-c", `model_reasoning_effort="${effort}"`);
+        attempted = true;
         const { stdout, code, stderr } = await spawn("codex", args, {
           env,
           // `codex exec` reads stdin when no prompt argv is provided; keep PR prompts/diffs out of process listings.
@@ -537,14 +545,16 @@ export function createCodexAi(parentEnv: Record<string, string | undefined>, spa
           timeoutMs,
           cwd: await isolatedCliCwd(),
         });
+        stdoutForMetrics = stdout;
         if (code !== 0) throw new Error(`codex_exit_${code ?? "null"}: ${redactSecrets(stderr ?? "").slice(0, 500)}`);
         const text = extractCliText(stdout);
         if (!text) throw new Error("codex_empty_output");
-        recordCliUsageMetrics("codex", codexModel, effort, stdout);
         return { response: text };
       } catch (error) {
         logSelfHostAiProviderFailed({ provider: "codex", model: codexModel, effort, timeoutMs, error });
         throw error;
+      } finally {
+        if (attempted) recordCliUsageMetrics("codex", codexModel, effort, stdoutForMetrics);
       }
     },
   };

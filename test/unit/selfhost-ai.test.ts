@@ -546,6 +546,8 @@ describe("subscription CLI helpers + fail-safe", () => {
     await expect(createClaudeCodeAi({ CLAUDE_CODE_OAUTH_TOKEN: "t" }, exit1).run("m", { prompt: "x" })).rejects.toThrow(/claude_code_exit_1/);
     const empty: StubSpawn = async () => ({ stdout: "", code: 0 });
     await expect(createClaudeCodeAi({ CLAUDE_CODE_OAUTH_TOKEN: "t" }, empty).run("m", { prompt: "x" })).rejects.toThrow(/claude_code_empty_output/);
+    const metrics = await renderMetrics();
+    expect(metrics).toContain('gittensory_ai_requests_total{effort="high",model="m",provider="claude-code"} 2');
   });
 
   it("Codex throws on empty output", async () => {
@@ -553,6 +555,8 @@ describe("subscription CLI helpers + fail-safe", () => {
     await expect(
       createCodexAi({ GITTENSORY_ENABLE_UNSAFE_CODEX_REVIEWER: "1" }, empty).run("gpt-5", { prompt: "x" }),
     ).rejects.toThrow(/codex_empty_output/);
+    const metrics = await renderMetrics();
+    expect(metrics).toContain('gittensory_ai_requests_total{effort="high",model="gpt-5",provider="codex"} 1');
   });
 
   it("Codex fails closed when a mounted OAuth home would be exposed to the review sandbox", async () => {
@@ -570,6 +574,8 @@ describe("subscription CLI helpers + fail-safe", () => {
     await expect(createCodexAi({}, shouldNotSpawn).run("gpt-5", { prompt: "x" })).rejects.toThrow(
       /codex_credential_isolation_required/,
     );
+    const metrics = await renderMetrics();
+    expect(metrics).not.toContain("gittensory_ai_requests_total");
   });
 
   it("surfaces the CLI's stderr in the non-zero-exit error (diagnosable failures, #26)", async () => {
@@ -583,6 +589,8 @@ describe("subscription CLI helpers + fail-safe", () => {
     await expect(createCodexAi({ GITTENSORY_ENABLE_UNSAFE_CODEX_REVIEWER: "1" }, codexErr).run("m", { prompt: "x" })).rejects.toThrow(
       /codex_exit_1: stream error: rate limit reached/,
     );
+    const metrics = await renderMetrics();
+    expect(metrics).toContain('gittensory_ai_requests_total{effort="high",model="m",provider="codex"} 1');
   });
 
   it("redacts the OAuth token and key-shaped tokens from claude stderr before they reach the error (#1605 sec)", async () => {
