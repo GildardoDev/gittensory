@@ -14,6 +14,10 @@ source_column_exists() {
   sqlite3 "$APP_DB" "SELECT 1 FROM pragma_table_info('$1') WHERE name = '$2' LIMIT 1" | grep -q 1
 }
 
+source_table_exists() {
+  sqlite3 "$APP_DB" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='$1' LIMIT 1" | grep -q 1
+}
+
 mkdir -p "$OUT_DIR"
 
 rm -f "$TMP_DB" "$TMP_DB-wal" "$TMP_DB-shm"
@@ -57,9 +61,54 @@ if [ ! -s "$APP_DB" ]; then
   exit 0
 fi
 
-if sqlite3 "$APP_DB" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='review_targets' LIMIT 1" | grep -q 1; then
+if source_table_exists "pull_requests" && source_table_exists "advisories"; then
   sqlite3 -cmd ".timeout 5000" "$APP_DB" "
 ATTACH '$TMP_DB_SQL' AS report;
+WITH latest_advisories AS (
+  SELECT
+    repo_full_name,
+    pull_number,
+    conclusion,
+    updated_at,
+    ROW_NUMBER() OVER (
+      PARTITION BY repo_full_name, pull_number
+      ORDER BY updated_at DESC, rowid DESC
+    ) AS rn
+  FROM main.advisories
+  WHERE pull_number IS NOT NULL
+),
+current_pull_requests AS (
+  SELECT
+    p.repo_full_name AS repo,
+    p.number AS number,
+    p.author_login AS submitter,
+    CASE
+      WHEN lower(p.state) = 'closed' AND p.merged_at IS NOT NULL THEN 'merged'
+      WHEN lower(p.state) = 'closed' THEN 'closed'
+      WHEN a.conclusion IN ('failure', 'action_required') THEN 'manual'
+      WHEN a.conclusion IS NOT NULL THEN 'commented'
+      ELSE 'manual'
+    END AS status,
+    CASE a.conclusion
+      WHEN 'success' THEN 'merge'
+      WHEN 'failure' THEN 'close'
+      WHEN 'action_required' THEN 'manual'
+      WHEN 'neutral' THEN 'comment'
+      WHEN 'skipped' THEN 'ignore'
+      ELSE NULL
+    END AS verdict,
+    p.title AS title,
+    p.created_at AS created_at,
+    CASE
+      WHEN a.updated_at IS NOT NULL AND a.updated_at > p.updated_at THEN a.updated_at
+      ELSE p.updated_at
+    END AS updated_at
+  FROM main.pull_requests p
+  LEFT JOIN latest_advisories a
+    ON a.repo_full_name = p.repo_full_name
+   AND a.pull_number = p.number
+   AND a.rn = 1
+)
 INSERT INTO report.review_targets (
   repo,
   number,
@@ -79,13 +128,46 @@ SELECT
   title,
   created_at,
   updated_at
-FROM main.review_targets
-WHERE kind = 'pull_request';
+FROM current_pull_requests;
 DETACH report;
 "
 fi
 
-if sqlite3 "$APP_DB" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_usage_events' LIMIT 1" | grep -q 1; then
+if source_table_exists "review_targets"; then
+  sqlite3 -cmd ".timeout 5000" "$APP_DB" "
+ATTACH '$TMP_DB_SQL' AS report;
+INSERT INTO report.review_targets (
+  repo,
+  number,
+  submitter,
+  status,
+  verdict,
+  title,
+  created_at,
+  updated_at
+)
+SELECT
+  t.repo,
+  t.number,
+  t.submitter,
+  t.status,
+  t.verdict,
+  t.title,
+  t.created_at,
+  t.updated_at
+FROM main.review_targets t
+WHERE t.kind = 'pull_request'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM report.review_targets r
+    WHERE r.repo = t.repo
+      AND r.number = t.number
+  );
+DETACH report;
+"
+fi
+
+if source_table_exists "ai_usage_events"; then
   ESTIMATED_NEURONS_EXPR=0
   if source_column_exists "ai_usage_events" "estimated_neurons"; then
     ESTIMATED_NEURONS_EXPR="estimated_neurons"

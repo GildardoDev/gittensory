@@ -42,6 +42,96 @@ function runExporter(root: string, sourceDb: string, outDb: string): void {
 }
 
 (sqliteCliAvailable ? describe : describe.skip)("Grafana reporting exporter", () => {
+  it("prefers current pull request rows while preserving non-overlapping legacy review history", () => {
+    const root = tmpRoot();
+    const appDb = join(root, "app.sqlite");
+    const outDb = join(root, "reporting.sqlite");
+    sqlite(appDb, `
+      CREATE TABLE review_targets (
+        kind TEXT NOT NULL,
+        repo TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        submitter TEXT,
+        status TEXT NOT NULL,
+        verdict TEXT,
+        title TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO review_targets (kind, repo, number, submitter, status, verdict, title, created_at, updated_at)
+      VALUES
+        ('pull_request', 'JSONbored/gittensory', 1690, 'stale', 'closed', 'close', 'stale current PR', '2026-06-22T17:00:00Z', '2026-06-22T17:00:00Z'),
+        ('pull_request', 'JSONbored/gittensory', 1049, 'bohdansolovie', 'closed', 'close', 'historical PR', '2026-06-22T17:28:56Z', '2026-06-22T17:28:56Z');
+
+      CREATE TABLE pull_requests (
+        repo_full_name TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        state TEXT NOT NULL,
+        author_login TEXT,
+        merged_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO pull_requests (repo_full_name, number, title, state, author_login, merged_at, created_at, updated_at)
+      VALUES
+        ('JSONbored/gittensory', 1690, 'fresh advisory PR', 'open', 'JSONbored', NULL, '2026-06-28T21:00:00Z', '2026-06-28T21:39:58Z'),
+        ('JSONbored/gittensory', 1691, 'fresh merged PR', 'closed', 'tmimmanuel', '2026-06-28T21:46:51Z', '2026-06-28T21:30:00Z', '2026-06-28T21:47:36Z');
+
+      CREATE TABLE advisories (
+        repo_full_name TEXT NOT NULL,
+        pull_number INTEGER,
+        conclusion TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO advisories (repo_full_name, pull_number, conclusion, updated_at)
+      VALUES
+        ('JSONbored/gittensory', 1690, 'failure', '2026-06-28T21:25:00Z'),
+        ('JSONbored/gittensory', 1690, 'neutral', '2026-06-28T21:40:00Z'),
+        ('JSONbored/gittensory', 1691, 'success', '2026-06-28T21:47:40Z');
+    `);
+
+    runExporter(root, appDb, outDb);
+
+    expect(sqlite(outDb, "PRAGMA quick_check;")).toBe("ok");
+    expect(sqlite(outDb, "SELECT count(*) FROM review_targets;")).toBe("3");
+    expect(sqlite(outDb, "SELECT submitter || '|' || status || '|' || verdict || '|' || updated_at FROM review_targets WHERE repo='JSONbored/gittensory' AND number=1690;")).toBe(
+      "JSONbored|commented|comment|2026-06-28T21:40:00Z",
+    );
+    expect(sqlite(outDb, "SELECT status || '|' || verdict || '|' || updated_at FROM review_targets WHERE repo='JSONbored/gittensory' AND number=1691;")).toBe(
+      "merged|merge|2026-06-28T21:47:40Z",
+    );
+    expect(sqlite(outDb, "SELECT title FROM review_targets WHERE repo='JSONbored/gittensory' AND number=1049;")).toBe("historical PR");
+  });
+
+  it("falls back to legacy review_targets when the current PR cache is absent", () => {
+    const root = tmpRoot();
+    const appDb = join(root, "app.sqlite");
+    const outDb = join(root, "reporting.sqlite");
+    sqlite(appDb, `
+      CREATE TABLE review_targets (
+        kind TEXT NOT NULL,
+        repo TEXT NOT NULL,
+        number INTEGER NOT NULL,
+        submitter TEXT,
+        status TEXT NOT NULL,
+        verdict TEXT,
+        title TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO review_targets (kind, repo, number, submitter, status, verdict, title, created_at, updated_at)
+      VALUES ('pull_request', 'JSONbored/gittensory', 1049, 'bohdansolovie', 'closed', 'close', 'legacy PR', '2026-06-22T17:28:56Z', '2026-06-22T17:28:56Z');
+    `);
+
+    runExporter(root, appDb, outDb);
+
+    expect(sqlite(outDb, "PRAGMA quick_check;")).toBe("ok");
+    expect(sqlite(outDb, "SELECT repo || '#' || number || '|' || status || '|' || verdict FROM review_targets;")).toBe(
+      "JSONbored/gittensory#1049|closed|close",
+    );
+  });
+
   it("copies durable AI usage estimate rows into the redacted reporting database", () => {
     const root = tmpRoot();
     const appDb = join(root, "app.sqlite");

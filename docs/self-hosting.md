@@ -251,13 +251,14 @@ content-lane are not yet per-repo toggleable and stay on the allowlist.)
   `docker-compose.yml` (copy `litestream.yml.example` → `litestream.yml`, set your bucket + credentials); it
   streams every change to S3/B2/MinIO/R2.
 - **Maintainer Grafana dashboards.** Grafana does **not** mount the live app database. The observability profile
-  starts `reporting-exporter`, which copies only the dashboard-safe `review_targets` and `ai_usage_events`
-  columns into `/reporting/gittensory-reporting.sqlite` every `GRAFANA_REPORTING_EXPORT_INTERVAL_SECONDS` seconds
-  (default 30). The SQLite datasource points at that redacted reporting DB. If you override the app SQLite
-  `DATABASE_PATH`, set `GITTENSORY_REPORTING_SOURCE_DB` to the matching exporter mount path, for example
-  `/appdb/custom.sqlite` for `DATABASE_PATH=/data/custom.sqlite`. `DATABASE_URL`/Postgres deployments currently
-  export an empty dashboard-safe DB so Grafana can start; Postgres-backed maintainer analytics need a dedicated SQL
-  exporter.
+  starts `reporting-exporter`, which projects the active `pull_requests` + latest `advisories` rows into a
+  dashboard-safe `review_targets` snapshot, preserves older non-overlapping legacy `review_targets`, and copies
+  redacted `ai_usage_events` rows into `/reporting/gittensory-reporting.sqlite` every
+  `GRAFANA_REPORTING_EXPORT_INTERVAL_SECONDS` seconds (default 30). The SQLite datasource points at that redacted
+  reporting DB. If you override the app SQLite `DATABASE_PATH`, set `GITTENSORY_REPORTING_SOURCE_DB` to the
+  matching exporter mount path, for example `/appdb/custom.sqlite` for `DATABASE_PATH=/data/custom.sqlite`.
+  `DATABASE_URL`/Postgres deployments currently export an empty dashboard-safe DB so Grafana can start;
+  Postgres-backed maintainer analytics need a dedicated SQL exporter.
 - **App-level metrics.** Enable `GITTENSORY_REVIEW_OPS=true` for the read-only gate-block anomaly scan and the
   bearer-gated `GET /v1/internal/ops/stats` aggregate.
 
