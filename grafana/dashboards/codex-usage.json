@@ -58,8 +58,8 @@
         {
           "refId": "A",
           "queryType": "table",
-          "queryText": "SELECT count(*) AS reviews FROM ai_usage_events WHERE feature = 'ai_review_pr' AND model LIKE 'codex%'",
-          "rawQueryText": "SELECT count(*) AS reviews FROM ai_usage_events WHERE feature = 'ai_review_pr' AND model LIKE 'codex%'"
+          "queryText": "SELECT count(*) AS reviews FROM ai_usage_events WHERE feature = 'ai_review_pr' AND (('+' || model || '+') LIKE '%+codex+%' OR ('+' || model || '+') LIKE '%+codex:%')",
+          "rawQueryText": "SELECT count(*) AS reviews FROM ai_usage_events WHERE feature = 'ai_review_pr' AND (('+' || model || '+') LIKE '%+codex+%' OR ('+' || model || '+') LIKE '%+codex:%')"
         }
       ]
     },
@@ -125,8 +125,8 @@
           "refId": "A",
           "queryType": "time series",
           "timeColumns": ["time"],
-          "queryText": "SELECT date(created_at) AS time, sum(estimated_neurons) AS estimated_neurons FROM ai_usage_events WHERE feature = 'ai_review_pr' AND model LIKE 'codex%' GROUP BY date(created_at) ORDER BY time",
-          "rawQueryText": "SELECT date(created_at) AS time, sum(estimated_neurons) AS estimated_neurons FROM ai_usage_events WHERE feature = 'ai_review_pr' AND model LIKE 'codex%' GROUP BY date(created_at) ORDER BY time"
+          "queryText": "SELECT date(created_at) AS time, sum(estimated_neurons) AS estimated_neurons FROM ai_usage_events WHERE feature = 'ai_review_pr' AND (('+' || model || '+') LIKE '%+codex+%' OR ('+' || model || '+') LIKE '%+codex:%') GROUP BY date(created_at) ORDER BY time",
+          "rawQueryText": "SELECT date(created_at) AS time, sum(estimated_neurons) AS estimated_neurons FROM ai_usage_events WHERE feature = 'ai_review_pr' AND (('+' || model || '+') LIKE '%+codex+%' OR ('+' || model || '+') LIKE '%+codex:%') GROUP BY date(created_at) ORDER BY time"
         }
       ]
     },
@@ -142,8 +142,8 @@
         {
           "refId": "A",
           "queryType": "table",
-          "queryText": "SELECT status, count(*) AS count FROM ai_usage_events WHERE feature = 'ai_review_pr' AND model LIKE 'codex%' GROUP BY status ORDER BY count DESC",
-          "rawQueryText": "SELECT status, count(*) AS count FROM ai_usage_events WHERE feature = 'ai_review_pr' AND model LIKE 'codex%' GROUP BY status ORDER BY count DESC"
+          "queryText": "SELECT status, count(*) AS count FROM ai_usage_events WHERE feature = 'ai_review_pr' AND (('+' || model || '+') LIKE '%+codex+%' OR ('+' || model || '+') LIKE '%+codex:%') GROUP BY status ORDER BY count DESC",
+          "rawQueryText": "SELECT status, count(*) AS count FROM ai_usage_events WHERE feature = 'ai_review_pr' AND (('+' || model || '+') LIKE '%+codex+%' OR ('+' || model || '+') LIKE '%+codex:%') GROUP BY status ORDER BY count DESC"
         }
       ]
     },
@@ -159,8 +159,8 @@
         {
           "refId": "A",
           "queryType": "table",
-          "queryText": "SELECT created_at, model, status, estimated_neurons, detail, json_extract(metadata_json, '$.repoFullName') AS repo, json_extract(metadata_json, '$.pullNumber') AS pr FROM ai_usage_events WHERE feature = 'ai_review_pr' AND model LIKE 'codex%' ORDER BY created_at DESC LIMIT 100",
-          "rawQueryText": "SELECT created_at, model, status, estimated_neurons, detail, json_extract(metadata_json, '$.repoFullName') AS repo, json_extract(metadata_json, '$.pullNumber') AS pr FROM ai_usage_events WHERE feature = 'ai_review_pr' AND model LIKE 'codex%' ORDER BY created_at DESC LIMIT 100"
+          "queryText": "SELECT created_at, model, status, estimated_neurons, detail, json_extract(metadata_json, '$.repoFullName') AS repo, json_extract(metadata_json, '$.pullNumber') AS pr FROM ai_usage_events WHERE feature = 'ai_review_pr' AND (('+' || model || '+') LIKE '%+codex+%' OR ('+' || model || '+') LIKE '%+codex:%') ORDER BY created_at DESC LIMIT 100",
+          "rawQueryText": "SELECT created_at, model, status, estimated_neurons, detail, json_extract(metadata_json, '$.repoFullName') AS repo, json_extract(metadata_json, '$.pullNumber') AS pr FROM ai_usage_events WHERE feature = 'ai_review_pr' AND (('+' || model || '+') LIKE '%+codex+%' OR ('+' || model || '+') LIKE '%+codex:%') ORDER BY created_at DESC LIMIT 100"
         }
       ]
     }
