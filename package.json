@@ -69,16 +69,16 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@octokit/core": "^7.0.6",
     "@sentry/node": "^10.62.0",
-    "agents": "^0.16.2",
+    "agents": "^0.17.0",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.26",
+    "hono": "^4.12.27",
     "ioredis": "^5.11.1",
     "pg": "^8.22.0",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.17",
+    "@cloudflare/vitest-pool-workers": "^0.16.20",
     "@tktco/node-actionlint": "^1.6.0",
     "@types/node": "^24.13.2",
     "@types/pg": "^8.20.0",
@@ -91,12 +91,12 @@
     "node-addon-api": "^8.8.0",
     "node-gyp": "^12.4.0",
     "pixelmatch": "^7.2.0",
-    "playwright": "^1.61.0",
+    "playwright": "^1.61.1",
     "pngjs": "^7.0.0",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",
     "vitest": "^4.1.9",
-    "wrangler": "^4.102.0"
+    "wrangler": "^4.105.0"
   },
   "engines": {
     "node": ">=22.0.0"
@@ -106,7 +106,7 @@
     "@lovable.dev/vite-plugin-hmr-gate": "1.1.0",
     "esbuild": "^0.28.1",
     "ws": "^8.21.0",
-    "tar": "^7.5.16",
+    "tar": "^7.5.17",
     "js-yaml": "^4.2.0",
     "lovable-tagger@1.2.0": {
       "esbuild": "^0.28.1"
