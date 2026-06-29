@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isPublicSafeText, PUBLIC_UNSAFE_PATTERN } from "../../src/signals/redaction";
+import {
+  isPublicSafeText,
+  PUBLIC_LOCAL_PATH_PREFIX_PATTERN,
+  PUBLIC_LOCAL_PATH_SCRUB_PATTERN,
+  PUBLIC_UNSAFE_PATTERN,
+} from "../../src/signals/redaction";
 
 describe("isPublicSafeText (#542 shared public/private boundary)", () => {
   it("accepts text with no private signals", () => {
@@ -59,5 +64,33 @@ describe("isPublicSafeText (#542 shared public/private boundary)", () => {
     expect(PUBLIC_UNSAFE_PATTERN.test("wallet")).toBe(true);
     expect(isPublicSafeText("clean line")).toBe(true);
     expect(isPublicSafeText("clean line")).toBe(true);
+  });
+});
+
+describe("shared local-path constants (#1418 drift fix)", () => {
+  it("scrubs every local root, including /root/ and /var/, plus both Windows forms", () => {
+    expect("clone at /Users/me/repo/src done".replace(PUBLIC_LOCAL_PATH_SCRUB_PATTERN, "<p>")).toBe("clone at <p> done");
+    expect("clone at /home/me/repo done".replace(PUBLIC_LOCAL_PATH_SCRUB_PATTERN, "<p>")).toBe("clone at <p> done");
+    expect("clone at /root/work/repo done".replace(PUBLIC_LOCAL_PATH_SCRUB_PATTERN, "<p>")).toBe("clone at <p> done");
+    expect("log at /var/log/app.log done".replace(PUBLIC_LOCAL_PATH_SCRUB_PATTERN, "<p>")).toBe("log at <p> done");
+    expect("tmp at /tmp/build done".replace(PUBLIC_LOCAL_PATH_SCRUB_PATTERN, "<p>")).toBe("tmp at <p> done");
+    expect("win at C:\\Users\\me\\repo done".replace(PUBLIC_LOCAL_PATH_SCRUB_PATTERN, "<p>")).toBe("win at <p> done");
+    expect("win at C:/Users/me/repo done".replace(PUBLIC_LOCAL_PATH_SCRUB_PATTERN, "<p>")).toBe("win at <p> done");
+  });
+
+  it("scrub pattern is global (safe for .replace across modules) and prefix pattern is anchored + non-global", () => {
+    expect(PUBLIC_LOCAL_PATH_SCRUB_PATTERN.global).toBe(true);
+    expect(PUBLIC_LOCAL_PATH_PREFIX_PATTERN.global).toBe(false);
+  });
+
+  it("prefix pattern matches a path that STARTS at a local root, not one merely containing it", () => {
+    expect(PUBLIC_LOCAL_PATH_PREFIX_PATTERN.test("/root/work/repo")).toBe(true);
+    expect(PUBLIC_LOCAL_PATH_PREFIX_PATTERN.test("/var/folders/me/repo")).toBe(true);
+    expect(PUBLIC_LOCAL_PATH_PREFIX_PATTERN.test("C:/Users/me/repo")).toBe(true);
+    expect(PUBLIC_LOCAL_PATH_PREFIX_PATTERN.test("C:\\Users\\me\\repo")).toBe(true);
+    expect(PUBLIC_LOCAL_PATH_PREFIX_PATTERN.test("src/signals/redaction.ts")).toBe(false);
+    // Non-global so .test() stays stateless across repeated calls on the same input.
+    expect(PUBLIC_LOCAL_PATH_PREFIX_PATTERN.test("/root/x")).toBe(true);
+    expect(PUBLIC_LOCAL_PATH_PREFIX_PATTERN.test("/root/x")).toBe(true);
   });
 });

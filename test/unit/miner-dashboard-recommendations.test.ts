@@ -319,6 +319,28 @@ describe("miner dashboard recommendation metadata", () => {
     expect(priorityChange).not.toHaveProperty("after");
   });
 
+  it("redacts /root/, /var/, and forward-slash Windows local paths from rerun reasons (#1418)", () => {
+    const current = decisionPack({
+      generatedAt: "2026-06-02T00:00:00.000Z",
+      topActions: [action()],
+      actionPortfolio: {
+        topActions: [
+          {
+            repoFullName: "JSONbored/gittensory",
+            actionKind: "open_new_direct_pr",
+            // /root/ and /var/ were already covered here; C:/Users/ (forward-slash) is now covered via the shared source.
+            rerunWhen: "Rerun when PRs change at /root/work/repo, /var/log/app.log, and C:/Users/alice/repo.",
+          },
+        ],
+      },
+    });
+
+    const [enriched] = buildMinerDashboardNextActions(current);
+    const repoStateReasons = enriched?.rerunReasons.find((group) => group.group === "repo_state")?.reasons.join(" ") ?? "";
+    expect(repoStateReasons).toContain("[local path]");
+    expect(JSON.stringify(enriched?.rerunReasons)).not.toMatch(/\/root\/work|\/var\/log|C:\/Users\/alice/);
+  });
+
   it("selects the previous ready decision-pack snapshot", () => {
     const current = decisionPack({ generatedAt: "2026-06-02T00:00:00.000Z" });
     const previous = decisionPack({ generatedAt: "2026-06-01T00:00:00.000Z" });
