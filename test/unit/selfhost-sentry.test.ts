@@ -27,9 +27,9 @@ import {
   flushSentry,
   forwardStructuredLogToSentry,
   installStructuredLogForwarding,
+  resolveSentryRelease,
   scrubEvent,
   resetSentryForTest,
-  resolveSentryRelease,
 } from "../../src/selfhost/sentry";
 
 beforeEach(() => {
@@ -88,6 +88,22 @@ describe("disabled when SENTRY_DSN is unset (modular opt-out → complete no-op)
 });
 
 describe("enabled when SENTRY_DSN is set", () => {
+  it("resolves the Sentry release from explicit env, then the baked image version, ignoring blanks", () => {
+    expect(
+      resolveSentryRelease({
+        SENTRY_RELEASE: " custom-release ",
+        GITTENSORY_VERSION: "gittensory-selfhost@0.1.0",
+      } as unknown as NodeJS.ProcessEnv),
+    ).toBe("custom-release");
+    expect(
+      resolveSentryRelease({
+        SENTRY_RELEASE: "  ",
+        GITTENSORY_VERSION: " gittensory-selfhost@0.1.0 ",
+      } as unknown as NodeJS.ProcessEnv),
+    ).toBe("gittensory-selfhost@0.1.0");
+    expect(resolveSentryRelease({} as unknown as NodeJS.ProcessEnv)).toBeUndefined();
+  });
+
   it("returns true and wires init with defaults (?? right-hand branches) + the scrubber as beforeSend", async () => {
     expect(
       await initSentry({

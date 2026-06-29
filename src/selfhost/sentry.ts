@@ -9,13 +9,16 @@ let active = false;
 const SECRET_KEY =
   /(token|secret|key|password|passwd|authorization|auth|dsn|cookie|bearer|credential|private)/i;
 
-function firstNonBlank(...values: Array<string | undefined>): string | undefined {
-  return values.map((value) => value?.trim()).find((value): value is string => Boolean(value));
+function nonBlank(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 /** Resolve the Sentry release id from explicit override first, then the image-baked self-host version. */
-export function resolveSentryRelease(env: NodeJS.ProcessEnv): string | undefined {
-  return firstNonBlank(env.SENTRY_RELEASE, env.GITTENSORY_VERSION);
+export function resolveSentryRelease(
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  return nonBlank(env.SENTRY_RELEASE) ?? nonBlank(env.GITTENSORY_VERSION);
 }
 
 /** beforeSend scrubber — redact anything token/secret-like before an event leaves the box (privacy boundary). */

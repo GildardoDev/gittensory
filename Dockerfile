@@ -9,7 +9,6 @@ ARG GITTENSORY_VERSION=
 # ECR Public Gallery mirrors Docker Official Images with no rate limits and no auth.
 FROM public.ecr.aws/docker/library/node:24-slim AS build
 WORKDIR /app
-ARG SELFHOST_SOURCEMAP=false
 COPY package*.json ./
 # --ignore-scripts: no native builds are needed (SQLite is the built-in node:sqlite; @hono/node-server is
 # pure JS; esbuild ships its binary as an optional dependency, not a script).
@@ -17,21 +16,20 @@ RUN npm ci --ignore-scripts
 COPY . .
 # --all: bundle every dependency into one self-contained dist/server.mjs, so the runtime image needs no
 # node_modules (≈10× smaller). The bundle has zero `cloudflare:*` imports (stubbed at build), so no loader.
-# Release builds set SELFHOST_SOURCEMAP=true so Sentry can unminify the production bundle.
-RUN if [ "$SELFHOST_SOURCEMAP" = "true" ]; then SELFHOST_SOURCEMAP=1 node scripts/build-selfhost.mjs --all; else node scripts/build-selfhost.mjs --all; fi
+RUN node scripts/build-selfhost.mjs --all
+RUN node scripts/validate-selfhost-sourcemap.mjs
 
 # --- runtime base: slim, non-root -----------------------------------------------------------------------
 FROM public.ecr.aws/docker/library/node:24-slim AS runtime-base
 WORKDIR /app
-ARG GITTENSORY_VERSION
+ARG GITTENSORY_VERSION=
 ENV NODE_ENV=production \
     PLATFORM=self-hosted \
     PORT=8787 \
     DATABASE_PATH=/data/gittensory.sqlite \
     MIGRATIONS_DIR=/app/migrations \
     NPM_CONFIG_PREFIX=/home/node/.npm-global \
-    GITTENSORY_VERSION=${GITTENSORY_VERSION} \
-    NODE_OPTIONS=--enable-source-maps
+    GITTENSORY_VERSION=${GITTENSORY_VERSION}
 # Optional: bake the Claude Code / Codex CLIs so the `claude-code` / `codex` subscription providers (#979)
 # work in-image. Build with `--build-arg INSTALL_AI_CLIS=true`. No credentials are baked — operators mint
 # CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`) / codex auth at run time and pass it via the env.
@@ -43,6 +41,7 @@ RUN if [ "$INSTALL_AI_CLIS" = "true" ]; then apt-get update && apt-get install -
 # CLIs as the unprivileged user into a user-owned prefix while /app is still root-owned, keeping lifecycle
 # hooks from mutating the already-copied application bundle during the image build.
 RUN mkdir -p /home/node/.npm-global /home/node/.npm \
+    && rm -rf /home/node/.codex \
     && ln -s /data/codex /home/node/.codex \
     && chown -h node:node /home/node/.codex \
     && chown -R node:node /home/node/.npm-global /home/node/.npm
@@ -68,16 +67,13 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "dist/server.mjs"]
 
-# Release target: consume the already-built, Sentry-injected dist/ from a named BuildKit context:
-#   docker buildx build --target runtime-prebuilt --build-context selfhost_dist=./dist ...
-# This keeps the uploaded source maps and the deployed bundle byte-identical.
+# Maintainer release images are built from the already-built, Sentry-injected bundle in the workflow. The source map
+# is uploaded to Sentry there and is deliberately not copied into the runtime image.
 FROM runtime-base AS runtime-prebuilt
-COPY --chown=node:node --from=selfhost_dist / ./dist
+COPY --chown=node:node dist/server.mjs ./dist/server.mjs
 COPY --chown=node:node migrations ./migrations
-CMD ["node", "dist/server.mjs"]
 
-# Default target: normal local/CI image builds still compile inside Docker.
+# Default local/operator builds still build the bundle inside Docker, but only the JS bundle reaches runtime.
 FROM runtime-base AS runtime
-COPY --chown=node:node --from=build /app/dist ./dist
-COPY --chown=node:node --from=build /app/migrations ./migrations
-CMD ["node", "dist/server.mjs"]
+COPY --from=build --chown=node:node /app/dist/server.mjs ./dist/server.mjs
+COPY --from=build --chown=node:node /app/migrations ./migrations

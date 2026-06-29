@@ -240,11 +240,12 @@ content-lane are not yet per-repo toggleable and stay on the allowlist.)
   in-flight job, checkpoints the WAL, and closes the DB before exiting.
 - **Logs** are structured JSON (`selfhost_listening`, `selfhost_migrations_applied`, `selfhost_ai_provider`,
   `selfhost_queue_recovered`, `selfhost_job_dead`, `selfhost_cron_error`, `selfhost_shutdown`, …).
-- **Sentry.** Set `SENTRY_DSN` (or mount `SENTRY_DSN_FILE`) to enable error reporting. Keep
-  `SENTRY_ENVIRONMENT=selfhost`; leave `SENTRY_RELEASE` empty on official images so the baked
-  `GITTENSORY_VERSION` is used. For custom images, set `SENTRY_RELEASE` to the exact release id whose source maps
-  you uploaded. In Sentry's GitHub integration, map stack traces with **Stack Trace Root** `/app` and
-  **Source Code Root** `.`.
+- **Sentry error tracking.** Set `SENTRY_DSN` (or mount `SENTRY_DSN_FILE`) to capture self-host runtime errors.
+  Keep `SENTRY_ENVIRONMENT=selfhost`. The SDK release is `SENTRY_RELEASE` when set, otherwise the baked
+  `GITTENSORY_VERSION` value. Official release images bake `GITTENSORY_VERSION=gittensory-selfhost@<version>`;
+  the release workflow builds `dist/server.mjs`, injects/uploads matching Sentry source maps, then builds the
+  runtime image from that injected bundle. Custom images should set `SENTRY_RELEASE` only when you uploaded source
+  maps for that exact bundle under that exact release id.
 - **Data + backup.** Everything is the single SQLite file on the `gittensory-data` volume (WAL mode). Back up
   by snapshotting the volume or copying the `.sqlite` file. Migrations are idempotent and re-checked at boot.
   For **continuous, point-in-time backup**, enable the optional [Litestream](https://litestream.io) sidecar in
@@ -261,6 +262,48 @@ content-lane are not yet per-repo toggleable and stay on the allowlist.)
   Postgres-backed maintainer analytics need a dedicated SQL exporter.
 - **App-level metrics.** Enable `GITTENSORY_REVIEW_OPS=true` for the read-only gate-block anomaly scan and the
   bearer-gated `GET /v1/internal/ops/stats` aggregate.
+
+### Sentry source maps and release tracking
+
+This repo is not required to publish an official image on every self-host tweak. The source-map upload path is only
+wired into the maintainer release workflow (`selfhost-v*` tags or manual `release-selfhost` runs), so normal PRs and
+local operator builds do not upload anything to Sentry and do not need extra commands.
+
+Set the Sentry GitHub code mapping for the Sentry project to:
+
+| Sentry field      | Value |
+| ----------------- | ----- |
+| Stack Trace Root  | `/app` |
+| Source Code Root  | `.`   |
+| Branch            | `main` |
+
+The maintainer release workflow expects:
+
+| GitHub setting              | Value                                                                 |
+| --------------------------- | --------------------------------------------------------------------- |
+| Secret `SENTRY_AUTH_TOKEN`  | Sentry auth token allowed to create releases and upload source maps    |
+| Variable `SENTRY_ORG`       | Sentry organization slug                                              |
+| Variable `SENTRY_PROJECT`   | Sentry project slug                                                   |
+| Sentry GitHub integration   | Installed for `JSONbored/gittensory`, with the code mapping above      |
+
+The workflow builds `dist/server.mjs` with `dist/server.mjs.map`, validates the `sourceMappingURL` and embedded
+`sourcesContent`, injects Sentry debug ids, creates release `gittensory-selfhost@<version>`, associates commits with
+`set-commits --auto`, uploads the source maps, and then builds the image from that injected `dist/server.mjs`.
+`dist/server.mjs.map` is **not** copied into the runtime image and is not served by the app; it only exists as a
+private Sentry release artifact.
+
+For a custom image, source maps only work when the deployed JS bundle is the exact post-injection bundle whose map was
+uploaded. If you build locally and do not upload maps, leave `SENTRY_RELEASE` unset. Events still report to Sentry,
+but stack frames can remain bundled at `/app/dist/server.mjs`.
+
+If a new event still shows `/app/dist/server.mjs`:
+
+1. Confirm the event's `release` exactly matches the release that has the uploaded artifact bundle.
+2. Confirm the image was built from the injected `dist/server.mjs`, not from a later Docker-internal rebuild.
+3. Confirm the Sentry code mapping is `/app` → `.` on branch `main`.
+4. Confirm `dist/server.mjs` had `//# sourceMappingURL=server.mjs.map` before upload and the map includes
+   `sourcesContent`.
+5. Trigger a fresh event after the upload; old events may need reprocessing before they pick up newly uploaded maps.
 
 ---
 

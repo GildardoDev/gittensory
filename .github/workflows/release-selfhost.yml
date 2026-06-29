@@ -81,24 +81,10 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build self-host bundle for release
-        run: SELFHOST_SOURCEMAP=1 SELFHOST_BUNDLE_ALL=1 node scripts/build-selfhost.mjs --all --sourcemap
+        run: node scripts/build-selfhost.mjs --all
 
-      - name: Verify release source maps are in the image context
-        run: |
-          test -s dist/server.mjs
-          test -s dist/server.mjs.map
-          grep -Fq 'sourceMappingURL=server.mjs.map' dist/server.mjs
-          node --input-type=module <<'NODE'
-          import { readFileSync } from "node:fs";
-
-          const sourceMap = JSON.parse(readFileSync("dist/server.mjs.map", "utf8"));
-          if (sourceMap.sourceRoot !== "/app/dist") {
-            throw new Error(`Expected sourceRoot /app/dist, got ${sourceMap.sourceRoot ?? "<unset>"}`);
-          }
-          if (!Array.isArray(sourceMap.sources) || sourceMap.sources.length === 0) {
-            throw new Error("Expected release source map to include original sources");
-          }
-          NODE
+      - name: Validate release source map
+        run: node scripts/validate-selfhost-sourcemap.mjs
 
       - name: Detect Sentry release token
         id: sentry
@@ -117,20 +103,22 @@ jobs:
           echo "::error::Configure SENTRY_AUTH_TOKEN in the release environment before publishing official self-host images."
           exit 1
 
-      - name: Prepare Sentry release + source maps
+      - name: Upload Sentry source maps
         if: steps.sentry.outputs.enabled == 'true'
-        uses: getsentry/action-release@ff07929a6537bac57790c3451cf4d364aca38528 # v3
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-        with:
-          release: ${{ steps.version.outputs.release }}
-          set_commits: auto
-          ignore_missing: true
-          ignore_empty: true
-          sourcemaps: dist
-          url_prefix: /app/dist
-          strip_common_prefix: true
-          finalize: false
+          SENTRY_ORG: ${{ env.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ env.SENTRY_PROJECT }}
+          SENTRY_RELEASE: ${{ steps.version.outputs.release }}
+        run: |
+          test -n "$SENTRY_AUTH_TOKEN"
+          test -n "$SENTRY_ORG"
+          test -n "$SENTRY_PROJECT"
+          npx -y @sentry/cli@latest releases new "$SENTRY_RELEASE"
+          npx -y @sentry/cli@latest releases set-commits "$SENTRY_RELEASE" --auto
+          npx -y @sentry/cli@latest sourcemaps inject dist
+          node scripts/validate-selfhost-sourcemap.mjs
+          npx -y @sentry/cli@latest sourcemaps upload --release="$SENTRY_RELEASE" dist
 
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -162,8 +150,6 @@ jobs:
         with:
           context: .
           target: runtime-prebuilt
-          build-contexts: |
-            selfhost_dist=./dist
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
@@ -172,6 +158,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: true
           sbom: true
+
+      - name: Finalize Sentry release
+        if: steps.sentry.outputs.enabled == 'true'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ env.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ env.SENTRY_PROJECT }}
+          SENTRY_RELEASE: ${{ steps.version.outputs.release }}
+        run: npx -y @sentry/cli@latest releases finalize "$SENTRY_RELEASE"
 
       - name: GitHub Release
         if: github.event_name == 'push'
@@ -189,13 +184,3 @@ jobs:
             To include the Claude Code / Codex subscription CLIs, build locally with
             `--build-arg INSTALL_AI_CLIS=true`.
             Sentry release id baked into the image: `${{ steps.version.outputs.release }}`.
-
-      - name: Finalize Sentry release
-        if: steps.sentry.outputs.enabled == 'true'
-        uses: getsentry/action-release@ff07929a6537bac57790c3451cf4d364aca38528 # v3
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-        with:
-          release: ${{ steps.version.outputs.release }}
-          environment: selfhost
-          set_commits: skip
