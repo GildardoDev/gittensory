@@ -2098,15 +2098,14 @@ export async function fetchLiveCiAggregate(
     }
   }
 
-  // FOLD-ALL hardening (#ci-foldall-checksuites): when branch protection is UNREADABLE (no `administration:read`
-  // ⇒ requiredContexts null ⇒ fold-all), the check-run/status scan above can read "passed" for a fork PR whose
-  // required workflow is AWAITING APPROVAL — its check-RUNS don't exist yet (the workflow never ran), so only the
-  // always-on third-party checks are seen and nothing fails or pends. Read the check-SUITES too: a GitHub-Actions
-  // suite still `queued`/`requested`/`waiting`/`in_progress` (not `completed`) means the first-party CI has NOT
-  // run, so hold (pending) instead of certifying a never-run workflow as green. Enforce-required mode already
-  // catches this via the absent-context guard above, so this runs ONLY in fold-all (one extra call on the degraded
-  // path), and ONLY when we would otherwise certify "passed" (no failure, nothing else pending).
-  if (!enforceRequiredOnly && headSha && failingDetails.length === 0 && !anyPending && !checkRunsIncomplete && !statusIncomplete) {
+  // Check-suite hardening (#ci-foldall-checksuites / #dependent-ci-materialization): the check-run/status scan can
+  // read "settled" before GitHub materializes downstream jobs whose `needs:` dependencies just completed
+  // (`coverage-upload` and then `validate` are the common shape). Read the check-SUITES too before certifying a
+  // commit settled: a GitHub-Actions suite still `queued`/`requested`/`waiting`/`in_progress` means first-party CI
+  // has not finished, even if every currently-visible check-run is completed. This runs only when the cheaper
+  // sources found no failure, no pending check, and no incomplete page, so it does not add a call to already-pending
+  // or already-failing PRs.
+  if (headSha && failingDetails.length === 0 && !anyPending && !anyVisiblePending && !checkRunsIncomplete && !statusIncomplete) {
     const suitesResult = await githubJsonWithHeaders<{ check_suites?: Array<{ status?: string | null; app?: { slug?: string | null } | null }> }>(
       env,
       repoFullName,
@@ -2121,9 +2120,10 @@ export async function fetchLiveCiAggregate(
     if (!suitesResult) {
       // total === 0 means the commit has NO checks at all → genuinely unverified (no CI), not a missing first-party
       // run, so leave it; only pend when checks DO exist but none of them is a confirmed first-party run.
-      if (!sawFirstPartyCheckRun && total > 0) anyPending = true;
+      if (!enforceRequiredOnly && !sawFirstPartyCheckRun && total > 0) anyPending = true;
     } else if ((suitesResult.data.check_suites ?? []).some((suite) => (suite.app?.slug ?? "").toLowerCase() === "github-actions" && (suite.status ?? "").toLowerCase() !== "completed")) {
-      anyPending = true; // a first-party GitHub Actions workflow has not completed (e.g. a fork PR awaiting approval)
+      anyPending = true; // a first-party GitHub Actions workflow has not completed (or downstream jobs are pending materialization)
+      anyVisiblePending = true;
     }
   }
 

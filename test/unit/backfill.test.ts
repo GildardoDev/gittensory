@@ -3081,20 +3081,37 @@ describe("GitHub backfill", () => {
       expect(aggregate.ciState).toBe("passed");
     });
 
-    it("ENFORCE-required mode does NOT consult check-suites (the absent-context guard already handles it)", async () => {
+    it("ENFORCE-required mode waits when the GitHub Actions suite is still materializing downstream jobs", async () => {
       const env = createTestEnv({ GITHUB_PUBLIC_TOKEN: "public-token" });
       let suitesFetched = false;
       vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
         const url = input.toString();
-        if (url.includes("/check-suites?")) suitesFetched = true;
+        if (url.includes("/check-suites?")) {
+          suitesFetched = true;
+          return Response.json({ check_suites: [{ status: "in_progress", app: { slug: "github-actions" } }] });
+        }
         if (url.includes("/check-runs?")) return Response.json({ check_runs: [{ name: "test", status: "completed", conclusion: "success" }] });
         if (url.includes("/status?")) return Response.json({ statuses: [] });
         return new Response("not found", { status: 404 });
       });
-      // Required = {test} and it passed → passed; the check-suites call is never made in enforce-required mode.
+      const aggregate = await fetchLiveCiAggregate(env, "JSONbored/gittensory", "abc123", "public-token", new Set(["test"]));
+      expect(aggregate.ciState).toBe("pending");
+      expect(aggregate.hasPending).toBe(true);
+      expect(suitesFetched).toBe(true);
+    });
+
+    it("ENFORCE-required mode does not over-pend when check-suites are unreadable after required checks passed", async () => {
+      const env = createTestEnv({ GITHUB_PUBLIC_TOKEN: "public-token" });
+      vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.includes("/check-runs?")) return Response.json({ check_runs: [{ name: "test", status: "completed", conclusion: "success", app: { slug: "github-actions" } }] });
+        if (url.includes("/status?")) return Response.json({ statuses: [] });
+        if (url.includes("/check-suites?")) return new Response("forbidden", { status: 403 });
+        return new Response("not found", { status: 404 });
+      });
       const aggregate = await fetchLiveCiAggregate(env, "JSONbored/gittensory", "abc123", "public-token", new Set(["test"]));
       expect(aggregate.ciState).toBe("passed");
-      expect(suitesFetched).toBe(false);
+      expect(aggregate.hasPending).toBe(false);
     });
 
     it("fold-all: tolerates malformed check-suites (missing app / missing status) without throwing", async () => {
