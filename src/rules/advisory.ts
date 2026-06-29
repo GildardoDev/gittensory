@@ -751,9 +751,9 @@ function addPullRequestFindings(
     findings.push({
       code: "busy_pr_queue",
       severity: "info",
-      title: "Open PR queue is busy",
+      title: "Review queue is busy",
       detail: `Gittensory has ${otherOpenPullRequests.length} other open pull requests cached for this repository.`,
-      publicText: "This repo has a busy open PR queue in the local Gittensory cache.",
+      publicText: "This repo has a busy review queue in the local Gittensory cache.",
     });
   }
   const repoMultipliers = repo?.registryConfig?.labelMultipliers ?? {};

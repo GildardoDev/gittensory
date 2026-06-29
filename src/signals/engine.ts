@@ -3993,12 +3993,12 @@ export function buildPublicReadinessScore(args: {
       label: "Change scope",
       score: reviewLoadScore,
       max: 20,
-      evidence: `Readiness component derived from cached public PR metadata and labels${formatSizeLabelEvidence(args.pr.labels)}.`,
-      action: reviewLoadScore >= 18 ? "No action." : "Add scope summary.",
+      evidence: changeScopeEvidence(args.pr, args.preflight.reviewBurden),
+      action: reviewLoadScore >= 18 ? "No action." : "Add a concise scope and risk note.",
     },
     {
       key: "validation",
-      label: "Validation evidence",
+      label: "Validation posture",
       score: validation.score,
       max: 25,
       evidence: validation.evidence,
@@ -4014,7 +4014,7 @@ export function buildPublicReadinessScore(args: {
     },
     {
       key: "queue_pressure",
-      label: "Open PR queue",
+      label: "Review queue context",
       score: queuePressure.score,
       max: queuePressure.max,
       evidence: queuePressure.evidence,
@@ -4072,8 +4072,9 @@ type PublicSafeCollapsibleArgs = {
 function signalDefinitionsBody(): string[] {
   return [
     "- Related work = same linked issue, overlapping active PRs, or title/path similarity.",
-    "- Review load = cached public PR metadata such as size labels, changed paths, and preflight status.",
-    "- Open PR queue = repo-wide review pressure; it is not a PR quality failure.",
+    "- Change scope = cached public metadata such as size labels, draft state, and review-burden hints.",
+    "- Validation posture = whether the PR provides enough public validation/test evidence for maintainer review.",
+    "- Contributor workload = public contributor activity and cleanup pressure, not a repo-wide quality failure.",
     "- Contributor context = public GitHub/Gittensor identity context; non-Gittensor status is not a blocker.",
   ];
 }
@@ -4267,7 +4268,7 @@ export function buildPublicPrIntelligenceComment(args: {
   const readinessByKey = new Map(readiness.components.map((component) => [component.key, component]));
   const validationComponent = readinessByKey.get("validation");
   const changeScopeComponent = readinessByKey.get("change_scope");
-  const queueComponent = readinessByKey.get("queue_pressure");
+  const contributorWorkload = contributorWorkloadPanelResult(args.profile);
   const contributorContext = contributorContextPanelResult(args.pr, args.profile, args.detection, confirmedMiner);
   // Each row carries a stable key so a maintainer can show/hide it from `.gittensory.yml review.fields`
   // (default: shown). Hiding a row is cosmetic — the underlying signal/gate still functions.
@@ -4275,9 +4276,9 @@ export function buildPublicPrIntelligenceComment(args: {
     { key: "linkedIssue", cells: ["Linked issue", linkedIssueResult.result, linkedIssueResult.evidence, linkedIssueResult.action] },
     { key: "relatedWork", cells: ["Related work", relatedWorkResult.result, relatedWorkResult.evidence, relatedWorkResult.action] },
     /* v8 ignore start -- Readiness components are built as a fixed key set; fallbacks guard future partial score shapes. */
-    { key: "reviewLoad", cells: ["Review load", scoreResultIcon(changeScopeComponent), changeScopeComponent?.evidence ?? "No public scope metadata found.", changeScopeComponent?.action ?? "No action."] },
-    { key: "validationEvidence", cells: ["Validation evidence", scoreResultIcon(validationComponent), validationComponent?.evidence ?? "No validation signal found.", validationComponent?.action ?? "Add validation note."] },
-    { key: "openPrQueue", cells: ["Open PR queue", scoreResultIcon(queueComponent), queueComponent?.evidence ?? "Open PR queue unavailable.", queueComponent?.action ?? "No action."] },
+    { key: "reviewLoad", cells: ["Change scope", scoreResultIcon(changeScopeComponent), changeScopeComponent?.evidence ?? "No public scope metadata found.", changeScopeComponent?.action ?? "No action."] },
+    { key: "validationEvidence", cells: ["Validation posture", scoreResultIcon(validationComponent), validationComponent?.evidence ?? "No validation signal found.", validationComponent?.action ?? "Add validation note."] },
+    { key: "openPrQueue", cells: ["Contributor workload", contributorWorkload.result, contributorWorkload.evidence, contributorWorkload.action] },
     /* v8 ignore stop */
     { key: "contributorContext", cells: ["Contributor context", contributorContext.result, contributorContext.evidence, contributorContext.action] },
     { key: "gateResult", cells: ["Gate result", gateStatus(gateEnabled, gateConclusion), gateEnabled ? gateAction(gateConclusion) : "Advisory only.", gateEnabled ? gateNextAction(gateConclusion) : "No action."] },
@@ -4334,8 +4335,9 @@ export function buildPublicPrIntelligenceComment(args: {
     "<summary>Signal definitions</summary>",
     "",
     "- Related work = same linked issue, overlapping active PRs, or title/path similarity.",
-    "- Review load = cached public PR metadata such as size labels, changed paths, and preflight status.",
-    "- Open PR queue = repo-wide review pressure; it is not a PR quality failure.",
+    "- Change scope = cached public metadata such as size labels, draft state, and review-burden hints.",
+    "- Validation posture = whether the PR provides enough public validation/test evidence for maintainer review.",
+    "- Contributor workload = public contributor activity and cleanup pressure, not a repo-wide quality failure.",
     "- Contributor context = public GitHub/Gittensor identity context; non-Gittensor status is not a blocker.",
     "",
     "</details>",
@@ -4446,14 +4448,14 @@ export function buildPublicPrPanelSignalRows(args: {
   const readinessByKey = new Map(readiness.components.map((component) => [component.key, component]));
   const validationComponent = readinessByKey.get("validation");
   const changeScopeComponent = readinessByKey.get("change_scope");
-  const queueComponent = readinessByKey.get("queue_pressure");
+  const contributorWorkload = contributorWorkloadPanelResult(args.profile);
   const contributorContext = contributorContextPanelResult(args.pr, args.profile, args.detection, confirmedMiner);
   const rows: PublicPrPanelSignalRow[] = [
     { key: "linkedIssue", cells: ["Linked issue", linkedIssueResult.result, linkedIssueResult.evidence, linkedIssueResult.action] },
     { key: "relatedWork", cells: ["Related work", relatedWorkResult.result, relatedWorkResult.evidence, relatedWorkResult.action] },
-    { key: "reviewLoad", cells: ["Review load", scoreResultIcon(changeScopeComponent), changeScopeComponent?.evidence ?? "No public scope metadata found.", changeScopeComponent?.action ?? "No action."] },
-    { key: "validationEvidence", cells: ["Validation evidence", scoreResultIcon(validationComponent), validationComponent?.evidence ?? "No validation signal found.", validationComponent?.action ?? "Add validation note."] },
-    { key: "openPrQueue", cells: ["Open PR queue", scoreResultIcon(queueComponent), queueComponent?.evidence ?? "Open PR queue unavailable.", queueComponent?.action ?? "No action."] },
+    { key: "reviewLoad", cells: ["Change scope", scoreResultIcon(changeScopeComponent), changeScopeComponent?.evidence ?? "No public scope metadata found.", changeScopeComponent?.action ?? "No action."] },
+    { key: "validationEvidence", cells: ["Validation posture", scoreResultIcon(validationComponent), validationComponent?.evidence ?? "No validation signal found.", validationComponent?.action ?? "Add validation note."] },
+    { key: "openPrQueue", cells: ["Contributor workload", contributorWorkload.result, contributorWorkload.evidence, contributorWorkload.action] },
     { key: "contributorContext", cells: ["Contributor context", contributorContext.result, contributorContext.evidence, contributorContext.action] },
     { key: "gateResult", cells: ["Gate result", gateStatus(gateEnabled, gateConclusion), gateEnabled ? gateAction(gateConclusion) : "Advisory only.", gateEnabled ? gateNextAction(gateConclusion) : "No action."] },
   ];
@@ -4560,7 +4562,46 @@ function contributorContextPanelResult(
   };
 }
 
-function scoreResultIcon(component: PublicReadinessScore["components"][number] | undefined): string {
+function changeScopeEvidence(pr: PullRequestRecord, reviewBurden: PreflightResult["reviewBurden"]): string {
+  const burden = reviewBurden === "low" ? "Low" : reviewBurden === "medium" ? "Medium" : "High";
+  const sizeLabel = pr.labels.find((label) => /^size[:/-]/i.test(label));
+  const detailParts = [
+    sizeLabel ? `size label ${sanitizePanelText(sizeLabel)}` : undefined,
+    pr.isDraft ? "draft PR" : undefined,
+    pr.linkedIssues.length > 0 ? `${pr.linkedIssues.length} linked issue${pr.linkedIssues.length === 1 ? "" : "s"}` : "no linked issue context",
+  ].filter(Boolean);
+  return `${burden} review scope from cached public metadata (${detailParts.join("; ")}).`;
+}
+
+function contributorWorkloadPanelResult(profile: ContributorProfile): { result: string; evidence: string; action: string } {
+  const unlinkedOpenPullRequests = Math.max(0, profile.trustSignals.unlinkedOpenPullRequests);
+  const maintainerAssociatedPullRequests = Math.max(0, profile.trustSignals.maintainerAssociatedPullRequests);
+  const pullRequests = Math.max(0, profile.registeredRepoActivity.pullRequests);
+  const mergedPullRequests = Math.max(0, profile.registeredRepoActivity.mergedPullRequests);
+  const issues = Math.max(0, profile.registeredRepoActivity.issues);
+  const score = contributorWorkloadScore(unlinkedOpenPullRequests);
+  const detailParts = [
+    `${pullRequests} registered-repo PR(s)`,
+    `${mergedPullRequests} merged`,
+    `${issues} issue(s)`,
+    unlinkedOpenPullRequests > 0 ? `${unlinkedOpenPullRequests} unlinked open PR(s)` : undefined,
+    maintainerAssociatedPullRequests > 0 ? `${maintainerAssociatedPullRequests} maintainer-associated PR(s)` : undefined,
+  ].filter(Boolean);
+  return {
+    result: scoreResultIcon({ score, max: 10 }),
+    evidence: `Author activity: ${detailParts.join(", ")}.`,
+    action: unlinkedOpenPullRequests > 0 ? "Link or explain open contributor PRs." : "No action.",
+  };
+}
+
+function contributorWorkloadScore(unlinkedOpenPullRequests: number): number {
+  if (unlinkedOpenPullRequests === 0) return 10;
+  if (unlinkedOpenPullRequests <= 2) return 8;
+  if (unlinkedOpenPullRequests <= 5) return 5;
+  return 3;
+}
+
+function scoreResultIcon(component: Pick<PublicReadinessScore["components"][number], "score" | "max"> | undefined): string {
   /* v8 ignore next -- Component lookup is fixed today; undefined is a defensive fallback for future score shape drift. */
   if (!component) return "⚠️ No score";
   const ratio = component.score / component.max;
@@ -4580,7 +4621,7 @@ function validationComponent(pr: PullRequestRecord, preflight: PreflightResult):
   const missingTests = findingCodes.some((code) => /missing.*test|test.*missing|no_test/i.test(code));
   const explicitValidation = hasValidationNote(pr.body ?? "");
   if (preflight.status === "hold") {
-    return { score: 5, evidence: "Cached preflight status is hold.", action: "Fix blocker." };
+    return { score: 5, evidence: "Preflight is holding this PR; address the blocker before review.", action: "Fix the blocker." };
   }
   if (missingTests) {
     // A body validation note is an UNBACKED claim when no test files accompany the change. Cap it just above the
@@ -4588,15 +4629,15 @@ function validationComponent(pr: PullRequestRecord, preflight: PreflightResult):
     // zero-test PR — full credit is reserved for actual test evidence in the branch below. (#audit-2.3)
     return explicitValidation
       ? { score: 12, evidence: "PR body claims validation but no test files accompany the change.", action: "Add tests covering the change." }
-      : { score: 10, evidence: "No cached test files or validation note found.", action: "Add validation note." };
+      : { score: 10, evidence: "No cached test files or validation note found.", action: "Add tests or validation evidence." };
   }
   if (explicitValidation) {
     return { score: 25, evidence: "PR body includes validation/test evidence.", action: "No action." };
   }
   if (preflight.status === "ready") {
-    return { score: 20, evidence: "Cached preflight status is ready; explicit validation note not found.", action: "Add validation note." };
+    return { score: 20, evidence: "Preflight is ready, but the PR body does not name the validation run.", action: "Add validation command/output." };
   }
-  return { score: 12, evidence: "Cached preflight status needs author follow-up.", action: "Add validation note." };
+  return { score: 12, evidence: "Preflight needs author follow-up before maintainer review.", action: "Address findings or add validation evidence." };
 }
 
 function queuePressureComponent(queueHealth: QueueHealth): { score: number; max: 10; evidence: string; action: string } {
@@ -4623,8 +4664,8 @@ function queuePressureComponent(queueHealth: QueueHealth): { score: number; max:
   return {
     score,
     max: 10,
-    evidence: `${detailParts.join(", ")}.`,
-    action: score >= 8 ? "No action." : "Expect slower review.",
+    evidence: `Repo queue: ${detailParts.join(", ")}.`,
+    action: score >= 8 ? "No action." : "Triage stale or unlinked PRs.",
   };
 }
 
@@ -4811,11 +4852,6 @@ export function hasClearNoIssueRationale(pr: Pick<PullRequestRecord, "title" | "
 
 function hasValidationNote(value: string): boolean {
   return /\b(test(?:ed|s|ing)?|validation|validated|verified|manual check|smoke|pytest|vitest|npm test|pnpm test|cargo test|go test)\b/i.test(value);
-}
-
-function formatSizeLabelEvidence(labels: string[]): string {
-  const sizeLabel = labels.find((label) => /^size[:/-]/i.test(label));
-  return sizeLabel ? `; size label ${sizeLabel}` : "";
 }
 
 function gateStatus(gateEnabled: boolean, conclusion: PublicPrPanelGateEvaluation["conclusion"]): string {

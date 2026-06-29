@@ -350,7 +350,7 @@ describe("advisory rules", () => {
         findings: [
           { code: "missing_linked_issue", title: "No linked issue detected", severity: "warning", detail: "No linked issue." },
           { code: "duplicate_pr_risk", title: "Linked issue overlaps another open PR", severity: "warning", detail: "Duplicate." },
-          { code: "busy_pr_queue", title: "Open PR queue is busy", severity: "warning", detail: "Queue context." },
+          { code: "busy_pr_queue", title: "Review queue is busy", severity: "warning", detail: "Queue context." },
         ],
       },
       { linkedIssueGateMode: "block", duplicatePrGateMode: "block", qualityGateMode: "block", qualityGateMinScore: 90, readinessScore: 42 },
@@ -729,7 +729,7 @@ describe("advisory rules", () => {
           title: "Queue pressure",
           severity: "warning" as const,
           detail: "Private detail",
-          publicText: "Open PR queue is elevated; keep changes focused.",
+          publicText: "Review queue is elevated; keep changes focused.",
         },
       ],
     };

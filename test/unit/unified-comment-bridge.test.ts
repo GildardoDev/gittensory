@@ -35,9 +35,9 @@ function gate(over: Partial<GateCheckEvaluation> = {}): GateCheckEvaluation {
 const panelRows: PublicPrPanelSignalRow[] = [
   { key: "linkedIssue", cells: ["Linked issue", "✅ Linked", "#42", "No action."] },
   { key: "relatedWork", cells: ["Related work", "✅ No active overlap found", "No same-issue overlap.", "No action."] },
-  { key: "reviewLoad", cells: ["Review load", "⚠️ 14/20", "Medium review burden.", "Add scope summary."] },
-  { key: "validationEvidence", cells: ["Validation evidence", "✅ 25/25", "PR body includes validation.", "No action."] },
-  { key: "openPrQueue", cells: ["Open PR queue", "✅ 10/10", "Low queue pressure.", "No action."] },
+  { key: "reviewLoad", cells: ["Change scope", "⚠️ 14/20", "Medium review scope.", "Add a concise scope and risk note."] },
+  { key: "validationEvidence", cells: ["Validation posture", "✅ 25/25", "PR body includes validation.", "No action."] },
+  { key: "openPrQueue", cells: ["Contributor workload", "✅ 10/10", "No contributor cleanup pressure.", "No action."] },
   { key: "contributorContext", cells: ["Contributor context", "✅ Confirmed Gittensor contributor", "octocat", "No action."] },
   { key: "gateResult", cells: ["Gate result", "✅ Passing", "No configured blocker found.", "No action."] },
 ];
@@ -69,7 +69,7 @@ describe("panelRowsToSignalRows", () => {
     const rows = panelRowsToSignalRows(panelRows);
     const linked = rows.find((row) => row.label === "Linked issue");
     expect(linked).toEqual({ label: "Linked issue", state: "ok", result: "Linked", evidence: "#42" });
-    const reviewLoad = rows.find((row) => row.label === "Review load");
+    const reviewLoad = rows.find((row) => row.label === "Change scope");
     expect(reviewLoad?.state).toBe("warn");
     expect(reviewLoad?.result).toBe("14/20");
   });

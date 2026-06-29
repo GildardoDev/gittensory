@@ -1275,9 +1275,9 @@ describe("signal coverage edge cases", () => {
     });
 
     expect(comment).toContain("> | Linked issue | ✅ No-issue rationale | PR body explains why no issue is linked. | No action. |");
-    expect(comment).toContain("> | Review load | ❌ 8/20 |");
-    expect(comment).toContain("> | Validation evidence | ❌ 5/25 | Cached preflight status is hold. | Fix blocker. |");
-    expect(comment).toContain("> | Open PR queue | ❌ 3/10 | 16 open PR(s), 0 likely reviewable, 16 unlinked. | Expect slower review. |");
+    expect(comment).toContain("> | Change scope | ❌ 8/20 | High review scope from cached public metadata (size label size:L; draft PR; no linked issue context). | Add a concise scope and risk note. |");
+    expect(comment).toContain("> | Validation posture | ❌ 5/25 | Preflight is holding this PR; address the blocker before review. | Fix the blocker. |");
+    expect(comment).toContain("> | Contributor workload | ✅ 10/10 | Author activity: 29 registered-repo PR(s), 20 merged, 6 issue(s). | No action. |");
     expect(comment).toContain("> | Gate result | ⚠️ Not blocking | Advisory; not blocking this PR. | No action. |");
     expect(comment).toContain("[JSONbored](https://github.com/JSONbored)");
     expect(comment).toContain("[Gittensor profile](https://gittensor.io/miners/details?githubId=49853598)");
@@ -1285,6 +1285,72 @@ describe("signal coverage edge cases", () => {
     expect(comment).toContain("- [ ] <!-- gittensory-rerun-review:v1 --> Re-run Gittensory review");
     expect(comment).not.toContain("- [x] <!-- gittensory-rerun-review:v1 -->");
     expect(comment).not.toMatch(/wallet|hotkey|payout|trust score|private score/i);
+  });
+
+  it("uses contributor workload buckets for the visible queue row", () => {
+    const directRepo = repo("owner/contributor-workload");
+    const currentPr = pr(directRepo.fullName, 32, "Fix contributor workload row", {
+      authorLogin: "dev",
+      body: "Fixes #10\n\nValidation: npm test",
+      linkedIssues: [10],
+    });
+    const preflight = buildPreflightResult(
+      { repoFullName: directRepo.fullName, title: currentPr.title, body: currentPr.body ?? undefined, linkedIssues: currentPr.linkedIssues },
+      directRepo,
+      [],
+      [currentPr],
+    );
+    const baseArgs = {
+      repo: directRepo,
+      pr: currentPr,
+      detection: { detected: true, source: "github_cache" as const, reason: "cached", priorPullRequests: 0, priorMergedPullRequests: 0, priorIssues: 0 },
+      queueHealth: queueHealthFixture(directRepo.fullName, "critical"),
+      collisions: buildCollisionReport(directRepo.fullName, [], [currentPr]),
+      preflight,
+      settings: repoSettings(directRepo.fullName),
+    };
+    const profileWithUnlinked = (unlinkedPullRequests: number, authoredPullRequests: PullRequestRecord[] = []) =>
+      buildContributorProfile(
+        "dev",
+        { login: "dev", topLanguages: ["TypeScript"], source: "github" },
+        authoredPullRequests,
+        [],
+        [
+          {
+            login: "dev",
+            repoFullName: directRepo.fullName,
+            pullRequests: 12,
+            mergedPullRequests: 7,
+            openPullRequests: unlinkedPullRequests,
+            issues: 3,
+            stalePullRequests: 0,
+            unlinkedPullRequests,
+            dominantLabels: [],
+          },
+        ],
+      );
+    const workloadRow = (profile: ReturnType<typeof buildContributorProfile>) =>
+      buildPublicPrPanelSignalRows({ ...baseArgs, profile }).rows.find((row) => row.key === "openPrQueue")?.cells;
+
+    expect(workloadRow(profileWithUnlinked(0))).toEqual(["Contributor workload", "✅ 10/10", "Author activity: 12 registered-repo PR(s), 7 merged, 3 issue(s).", "No action."]);
+    expect(workloadRow(profileWithUnlinked(2))).toEqual([
+      "Contributor workload",
+      "⚠️ 8/10",
+      "Author activity: 12 registered-repo PR(s), 7 merged, 3 issue(s), 2 unlinked open PR(s).",
+      "Link or explain open contributor PRs.",
+    ]);
+    expect(workloadRow(profileWithUnlinked(5))?.[1]).toBe("⚠️ 5/10");
+    expect(workloadRow(profileWithUnlinked(6))?.[1]).toBe("❌ 3/10");
+    expect(
+      workloadRow(
+        profileWithUnlinked(1, [
+          pr(directRepo.fullName, 33, "Maintainer-associated follow-up", {
+            authorLogin: "dev",
+            authorAssociation: "MEMBER",
+          }),
+        ]),
+      )?.[2],
+    ).toContain("1 maintainer-associated PR(s)");
   });
 
   it("scores public readiness from deterministic PR facts across branch cases", () => {
@@ -1333,10 +1399,10 @@ describe("signal coverage edge cases", () => {
 
     expect(scoreComponent(missingValidation, "traceability")).toMatchObject({ score: 8, action: "Explain no-issue PR." });
     expect(scoreComponent(missingValidation, "related_work")).toMatchObject({ score: 8, evidence: "Same linked issue with #3, #4.", action: "Compare #3, #4." });
-    expect(scoreComponent(missingValidation, "change_scope")).toMatchObject({ score: 14, action: "Add scope summary." });
-    expect(scoreComponent(missingValidation, "validation")).toMatchObject({ score: 10, evidence: "No cached test files or validation note found.", action: "Add validation note." });
+    expect(scoreComponent(missingValidation, "change_scope")).toMatchObject({ score: 14, action: "Add a concise scope and risk note." });
+    expect(scoreComponent(missingValidation, "validation")).toMatchObject({ score: 10, evidence: "No cached test files or validation note found.", action: "Add tests or validation evidence." });
     expect(scoreComponent(missingValidation, "pr_state")).toMatchObject({ score: 6, evidence: "PR is open as draft.", action: "Mark ready when done." });
-    expect(scoreComponent(missingValidation, "queue_pressure")).toMatchObject({ score: 5, action: "Expect slower review." });
+    expect(scoreComponent(missingValidation, "queue_pressure")).toMatchObject({ score: 5, action: "Triage stale or unlinked PRs." });
 
     // A body validation NOTE without accompanying test files is capped at 12 (was 25): a one-line "tested" can no
     // longer fake full validation evidence and lift readiness over a gate threshold on a zero-test PR. (#audit-2.3)
@@ -1363,9 +1429,9 @@ describe("signal coverage edge cases", () => {
       queueHealth: queueHealthFixture(directRepo.fullName, "critical"),
     });
 
-    expect(scoreComponent(weak, "validation")).toMatchObject({ score: 12, evidence: "Cached preflight status needs author follow-up." });
+    expect(scoreComponent(weak, "validation")).toMatchObject({ score: 12, evidence: "Preflight needs author follow-up before maintainer review." });
     expect(scoreComponent(weak, "pr_state")).toMatchObject({ score: 3, evidence: "PR state is closed.", action: "No action." });
-    expect(scoreComponent(weak, "queue_pressure")).toMatchObject({ score: 3, action: "Expect slower review." });
+    expect(scoreComponent(weak, "queue_pressure")).toMatchObject({ score: 3, action: "Triage stale or unlinked PRs." });
   });
 
   it("unionScopedOverlapClusters deduplicates PR-specific and preflight clusters (regression for Math.max mismatch)", () => {
@@ -1446,7 +1512,7 @@ describe("signal coverage edge cases", () => {
     });
     expect(scoreComponent(zeroScore, "queue_pressure")).toMatchObject({
       score: 10,
-      evidence: "0 open PR(s), 0 likely reviewable.",
+      evidence: "Repo queue: 0 open PR(s), 0 likely reviewable.",
       action: "No action.",
     });
 
@@ -1470,7 +1536,7 @@ describe("signal coverage edge cases", () => {
     });
     expect(scoreComponent(criticalBurdenScore, "queue_pressure")).toMatchObject({
       score: 10,
-      evidence: "4 open PR(s), 0 likely reviewable, 4 stale, 4 unlinked.",
+      evidence: "Repo queue: 4 open PR(s), 0 likely reviewable, 4 stale, 4 unlinked.",
       action: "No action.",
     });
 
@@ -1490,7 +1556,7 @@ describe("signal coverage edge cases", () => {
     });
     expect(scoreComponent(issueBurdenScore, "queue_pressure")).toMatchObject({
       score: 10,
-      evidence: "1 open PR(s), 1 likely reviewable.",
+      evidence: "Repo queue: 1 open PR(s), 1 likely reviewable.",
       action: "No action.",
     });
 
@@ -1506,7 +1572,7 @@ describe("signal coverage edge cases", () => {
       preflight: { ...preflight, status: "ready", reviewBurden: "low", findings: [] },
       queueHealth: sampledQueue,
     });
-    expect(scoreComponent(sampledScore, "queue_pressure")).toMatchObject({ score: 3, action: "Expect slower review." });
+    expect(scoreComponent(sampledScore, "queue_pressure")).toMatchObject({ score: 3, action: "Triage stale or unlinked PRs." });
     expect(scoreComponent(sampledScore, "queue_pressure").evidence).toContain("1 likely reviewable in 1 cached PR(s); full queue reviewability is sampled");
 
     // score=8 bucket (5–8 open PRs) — not covered by other cases
