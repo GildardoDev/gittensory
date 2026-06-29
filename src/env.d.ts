@@ -22,9 +22,6 @@ declare global {
     /** Convergence (infra): Browser Rendering binding for visual (before/after screenshot) capture. Optional —
      *  absent ⇒ no visual capture. Unused until the per-module wiring chunk; an unbound deploy is inert. */
     BROWSER?: Fetcher;
-    /** Legacy reviewbot KV shape. Cloudflare no longer binds this; self-host review policy should come from
-     *  container-private config. Existing readers are optional and fall back when absent. */
-    REVIEW_CONFIG?: KVNamespace;
     /** Self-host transient cache for short-lived coalescing/backpressure keys. */
     SELFHOST_TRANSIENT_CACHE?: {
       get(key: string): Promise<string | null>;
