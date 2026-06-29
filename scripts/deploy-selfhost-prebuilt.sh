@@ -14,6 +14,7 @@ ENV_FILE="${SELFHOST_ENV_FILE:-.env}"
 NODE_IMAGE="${SELFHOST_NODE_IMAGE:-public.ecr.aws/docker/library/node:24-slim}"
 SERVICE="${SELFHOST_SERVICE:-gittensory}"
 SKIP_SENTRY_UPLOAD="${SELFHOST_SKIP_SENTRY_UPLOAD:-0}"
+SENTRY_CLI_PACKAGE="${SENTRY_CLI_PACKAGE:-@sentry/cli@3.6.0}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -150,12 +151,13 @@ run_sentry_upload() {
     -e SENTRY_AUTH_TOKEN="$auth_token" \
     -e SENTRY_ORG="$org" \
     -e SENTRY_PROJECT="$project" \
+    -e SENTRY_CLI_PACKAGE="$SENTRY_CLI_PACKAGE" \
     -e HOST_UID="$uid" \
     -e HOST_GID="$gid" \
     -v "$PWD:/work" \
     -w /work \
     "$NODE_IMAGE" \
-    sh -lc 'apt-get update >/dev/null && apt-get install -y --no-install-recommends ca-certificates git >/dev/null && git config --global --add safe.directory /work && (npx -y @sentry/cli@latest releases new "$SENTRY_RELEASE" >/tmp/gittensory-sentry-release-new.log 2>&1 || true) && npx -y @sentry/cli@latest releases set-commits "$SENTRY_RELEASE" --auto && npx -y @sentry/cli@latest sourcemaps inject dist && node scripts/validate-selfhost-sourcemap.mjs && npx -y @sentry/cli@latest sourcemaps upload --release="$SENTRY_RELEASE" dist && npx -y @sentry/cli@latest releases finalize "$SENTRY_RELEASE" && chown -R "$HOST_UID:$HOST_GID" dist node_modules package-lock.json'
+    sh -lc 'apt-get update >/dev/null && apt-get install -y --no-install-recommends ca-certificates git >/dev/null && git config --global --add safe.directory /work && (npx -y "$SENTRY_CLI_PACKAGE" releases new "$SENTRY_RELEASE" >/tmp/gittensory-sentry-release-new.log 2>&1 || true) && npx -y "$SENTRY_CLI_PACKAGE" releases set-commits "$SENTRY_RELEASE" --auto && npx -y "$SENTRY_CLI_PACKAGE" sourcemaps inject dist && node scripts/validate-selfhost-sourcemap.mjs && npx -y "$SENTRY_CLI_PACKAGE" sourcemaps upload --release="$SENTRY_RELEASE" dist && npx -y "$SENTRY_CLI_PACKAGE" releases finalize "$SENTRY_RELEASE" && chown -R "$HOST_UID:$HOST_GID" dist node_modules package-lock.json'
 }
 
 run_compose_deploy() {

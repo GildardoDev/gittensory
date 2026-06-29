@@ -46,7 +46,7 @@ RUN mkdir -p /home/node/.npm-global /home/node/.npm \
     && chown -h node:node /home/node/.codex \
     && chown -R node:node /home/node/.npm-global /home/node/.npm
 USER node
-RUN if [ "$INSTALL_AI_CLIS" = "true" ]; then npm install -g @anthropic-ai/claude-code@2.1.187 @openai/codex@0.142.0; fi
+RUN if [ "$INSTALL_AI_CLIS" = "true" ]; then npm install -g --foreground-scripts @anthropic-ai/claude-code@2.1.187 @openai/codex@0.142.0; fi
 USER root
 # Optional: enable visual review via an external Chrome sidecar (e.g. `browserless/chrome:latest`).
 # Build with `--build-arg INSTALL_VISUAL_REVIEW=true` then set BROWSER_WS_ENDPOINT=<ws-url> at runtime.

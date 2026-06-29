@@ -33,6 +33,7 @@ jobs:
     env:
       SENTRY_ORG: jsonbored
       SENTRY_PROJECT: gittensory
+      SENTRY_CLI_PACKAGE: "@sentry/cli@3.6.0"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -114,11 +115,11 @@ jobs:
           test -n "$SENTRY_AUTH_TOKEN"
           test -n "$SENTRY_ORG"
           test -n "$SENTRY_PROJECT"
-          npx -y @sentry/cli@latest releases new "$SENTRY_RELEASE"
-          npx -y @sentry/cli@latest releases set-commits "$SENTRY_RELEASE" --auto
-          npx -y @sentry/cli@latest sourcemaps inject dist
+          npx -y "$SENTRY_CLI_PACKAGE" releases new "$SENTRY_RELEASE"
+          npx -y "$SENTRY_CLI_PACKAGE" releases set-commits "$SENTRY_RELEASE" --auto
+          npx -y "$SENTRY_CLI_PACKAGE" sourcemaps inject dist
           node scripts/validate-selfhost-sourcemap.mjs
-          npx -y @sentry/cli@latest sourcemaps upload --release="$SENTRY_RELEASE" dist
+          npx -y "$SENTRY_CLI_PACKAGE" sourcemaps upload --release="$SENTRY_RELEASE" dist
 
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -166,7 +167,7 @@ jobs:
           SENTRY_ORG: ${{ env.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ env.SENTRY_PROJECT }}
           SENTRY_RELEASE: ${{ steps.version.outputs.release }}
-        run: npx -y @sentry/cli@latest releases finalize "$SENTRY_RELEASE"
+        run: npx -y "$SENTRY_CLI_PACKAGE" releases finalize "$SENTRY_RELEASE"
 
       - name: GitHub Release
         if: github.event_name == 'push'
