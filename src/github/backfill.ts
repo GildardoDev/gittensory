@@ -59,7 +59,12 @@ import type {
   RepositorySettings,
 } from "../types";
 import { errorMessage, nowIso, repoParts, strippedErrorMessage } from "../utils/json";
-import { createInstallationToken, getAppInstallation, GITTENSORY_CONTEXT_CHECK_NAME, GITTENSORY_GATE_CHECK_NAME } from "./app";
+import { createInstallationToken, getAppInstallation } from "./app";
+import {
+  GITTENSORY_CONTEXT_CHECK_NAME,
+  GITTENSORY_GATE_CHECK_NAME,
+  GITTENSORY_LEGACY_GATE_CHECK_NAME,
+} from "../review/check-names";
 import { delayUntil, shouldWaitForGitHubRateLimit } from "./rate-limit";
 
 type GitHubLabelPayload = {
@@ -825,8 +830,8 @@ export async function buildInstallationRepairDiagnostics(env: Env, health: Insta
       optional: gateCheckRepoCount === 0,
       summary:
         gateCheckRepoCount > 0
-          ? "Gate check mode is enabled for at least one installed repo, so Checks: write is required."
-          : "Checks: write is optional unless gate check mode is enabled for an installed repo.",
+          ? "Review-agent check mode is enabled for at least one installed repo, so Checks: write is required."
+          : "Checks: write is optional unless review-agent check mode is enabled for an installed repo.",
     }),
   ];
   const eventDiagnostics: InstallationEventDiagnostic[] = [
@@ -1920,7 +1925,11 @@ const CI_PASSING_CONCLUSIONS = new Set(["success", "neutral", "skipped"]);
 // the very review they're blocking runs → the PR defers forever). Excluded from the CI aggregate entirely.
 // (#gate-self-deadlock — froze green-CI PRs as "CI still running". The Gate alone wasn't enough: the Context
 // check is posted the same way and re-created the deadlock, so exclude ALL bot-owned checks.)
-const BOT_OWNED_CHECK_NAMES = new Set<string>([GITTENSORY_GATE_CHECK_NAME, GITTENSORY_CONTEXT_CHECK_NAME]);
+const BOT_OWNED_CHECK_NAMES = new Set<string>([
+  GITTENSORY_GATE_CHECK_NAME,
+  GITTENSORY_LEGACY_GATE_CHECK_NAME,
+  GITTENSORY_CONTEXT_CHECK_NAME,
+]);
 
 function isOwnGitHubAppCheckRun(env: Env, run: GitHubCheckRunPayload): boolean {
   const appSlug = typeof run.app?.slug === "string" ? run.app.slug.trim().toLowerCase() : "";

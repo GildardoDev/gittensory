@@ -103,6 +103,7 @@ import {
   createOrUpdateSkippedGateCheckRun,
   getInstallationId,
   getRepositoryCollaboratorPermission,
+  GITTENSORY_GATE_CHECK_NAME,
   isGitHubRateLimitedError,
   isForeignAppInstallation,
 } from "../github/app";
@@ -3401,7 +3402,7 @@ export function gateCheckPolicy(
     qualityGateMinScore: settings.qualityGateMinScore ?? null,
     aiReviewGateMode: settings.aiReviewMode,
     // Calibrated AI close-confidence floor (#7) — config-as-code via `.gittensory.yml gate.aiReview.closeConfidence`,
-    // resolved into settings upstream. `null`/undefined ⇒ advisory.ts applies the 0.9 default.
+    // resolved into settings upstream. `null`/undefined ⇒ advisory.ts applies the 0.93 default.
     aiReviewCloseConfidence: settings.aiReviewCloseConfidence ?? null,
     readinessScore: readinessScore ?? null,
     slopGateMode: settings.slopGateMode,
@@ -4304,7 +4305,7 @@ async function maybePublishPrPublicSurface(
   }
 
   // Respect the per-repo agent pause: suppress all public surface mutations (label, comment, context
-  // check run) so a paused repo sees no gittensory-authored GitHub content. The Gittensory Gate check
+  // check run) so a paused repo sees no gittensory-authored GitHub content. The review-agent check
   // run still posts so the required-check status is not broken (#agent-pause).
   if (settings.agentPaused)
     decision = {
@@ -5051,7 +5052,7 @@ async function maybePublishPrPublicSurface(
     //   2. The gate is AUTHORITATIVE for the comment's color/headline: `buildUnifiedCommentBody` maps
     //      `gateEvaluation.conclusion` → a Verdict and feeds it as the renderer `decision`, which
     //      deriveUnifiedStatus honors BEFORE any reviewer recommendation. So the comment's tone can never
-    //      contradict the Gittensory Gate check-run conclusion.
+    //      contradict the review-agent check-run conclusion.
     //   3. The `ai_consensus_defect` surfaces exactly ONCE — as the Code-review blocker — never also in the
     //      gate signal row (which renders only the conclusion-derived status text, not the defect string).
     if (unifiedCommentAllowed && gateEvaluation) {
@@ -5701,8 +5702,8 @@ async function maybeProcessGateOverrideCommand(
       AGENT_COMMAND_COMMENT_MARKER,
       "",
       "> [!NOTE]",
-      `> **Gittensory Gate overridden by @${actor}**`,
-      "> The Gate check was set to neutral for the current commit only. This does NOT permanently bypass the Gate; a new push re-evaluates it.",
+      `> **${GITTENSORY_GATE_CHECK_NAME} overridden by @${actor}**`,
+      "> The review-agent check was set to neutral for the current commit only. This does NOT permanently bypass the review; a new push re-evaluates it.",
       "",
       `- Reason: ${safeReason}`,
       "",

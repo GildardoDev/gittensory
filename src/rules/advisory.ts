@@ -12,6 +12,7 @@ import type {
 import type { CollisionCluster, CollisionReport } from "../signals/engine";
 import { isDuplicateClusterWinner } from "../signals/duplicate-winner";
 import { nowIso } from "../utils/json";
+import { GITTENSORY_GATE_CHECK_NAME } from "../review/check-names";
 
 export type GateCheckConclusion = "success" | "failure" | "action_required" | "neutral" | "skipped";
 
@@ -27,7 +28,7 @@ export type GateCheckPolicy = {
   aiReviewGateMode?: GateRuleMode | undefined;
   /** Minimum calibrated confidence (0-1) for an AI-judgment defect (`ai_consensus_defect` / `ai_review_split`) to
    *  BLOCK under `aiReviewGateMode: block` (#7). The finding blocks only when its `confidence >= this`; below-threshold
-   *  AI defects hold for human review instead of passing or auto-closing. `null`/undefined ⇒ the 0.9 default. A finding
+   *  AI defects hold for human review instead of passing or auto-closing. `null`/undefined ⇒ the 0.93 default. A finding
    *  with no confidence (deterministic, or a graceful-fallback AI defect) is treated as 1.0 and always clears the floor
    *  — matching the historical always-block behavior. */
   aiReviewCloseConfidence?: number | null | undefined;
@@ -39,7 +40,7 @@ export type GateCheckPolicy = {
   slopRisk?: number | null | undefined;
   /** Master "merge-readiness" composite (#551). When set (advisory/block) it OVERRIDES all four sub-gates —
    *  linked-issue, duplicate, quality/readiness, slop — to its mode, so a maintainer flips ONE switch instead
-   *  of four and `Gittensory Gate` stays the single required check. `off` = sub-gates use their own modes. */
+   *  of four and the review-agent check stays the single required check. `off` = sub-gates use their own modes. */
   mergeReadinessGateMode?: GateRuleMode | undefined;
   /** Focus-manifest policy gate (#555). When `block`, linked-issue/test policy findings become hard blockers;
    *  blocked-path findings become manual-review holds because guardrailed paths should be reviewed, not closed.
@@ -122,7 +123,7 @@ export function reconcileGateEvaluationForGreenCi(evaluation: GateCheckEvaluatio
   return {
     ...evaluation,
     conclusion: "success",
-    title: "Gittensory Gate passed",
+    title: `${GITTENSORY_GATE_CHECK_NAME} passed`,
     summary: "The AI review raised a concern, but the deterministic checks (CI) are green — the concern is advisory, not blocking.",
     blockers: [],
   };
@@ -497,7 +498,7 @@ function evaluateGateCheckCore(advisoryResult: Advisory, policy: GateCheckPolicy
     return {
       enabled: true,
       conclusion: "neutral",
-      title: "Gittensory Gate — not evaluated yet",
+      title: `${GITTENSORY_GATE_CHECK_NAME} — not evaluated yet`,
       summary: "Gittensory has not finished syncing this repo/PR. The gate stays advisory and re-evaluates automatically; no action is needed.",
       blockers: [],
       warnings,
@@ -530,7 +531,7 @@ function evaluateGateCheckCore(advisoryResult: Advisory, policy: GateCheckPolicy
     return {
       enabled: true,
       conclusion: "neutral",
-      title: "Gittensory Gate — first-contribution grace",
+      title: `${GITTENSORY_GATE_CHECK_NAME} — first-contribution grace`,
       summary: "This is a first-time contribution to this repo, so the gate stays advisory rather than blocking. The findings remain visible, and the gate will apply normally once this author has merge history here.",
       blockers: [],
       warnings: gateWarnings,
@@ -541,7 +542,7 @@ function evaluateGateCheckCore(advisoryResult: Advisory, policy: GateCheckPolicy
       return {
         enabled: true,
         conclusion: "neutral",
-        title: "Gittensory Gate — held for human review",
+        title: `${GITTENSORY_GATE_CHECK_NAME} — held for human review`,
         summary: "The AI review flagged a possible must-fix defect below the automatic close-confidence floor, so the gate is held for a human reviewer instead of passed automatically.",
         blockers: [],
         warnings: [...gateWarnings, ...lowConfidenceAiHolds],
@@ -556,7 +557,7 @@ function evaluateGateCheckCore(advisoryResult: Advisory, policy: GateCheckPolicy
       return {
         enabled: true,
         conclusion: "neutral",
-        title: "Gittensory Gate — held for human review",
+        title: `${GITTENSORY_GATE_CHECK_NAME} — held for human review`,
         summary: "The AI review could not be completed for this change, so the gate is held for a human reviewer rather than passed automatically. It re-evaluates on the next update.",
         blockers: [],
         warnings: gateWarnings,
@@ -578,7 +579,7 @@ function evaluateGateCheckCore(advisoryResult: Advisory, policy: GateCheckPolicy
       return {
         enabled: true,
         conclusion: "neutral",
-        title: "Gittensory Gate — held for manual review",
+        title: `${GITTENSORY_GATE_CHECK_NAME} — held for manual review`,
         summary: holds.map((h) => sanitizeForCheckRun(h.title)).join("; "),
         blockers: [],
         warnings: [...gateWarnings, ...holds],
@@ -587,7 +588,7 @@ function evaluateGateCheckCore(advisoryResult: Advisory, policy: GateCheckPolicy
     return {
       enabled: true,
       conclusion: "success",
-      title: "Gittensory Gate passed",
+      title: `${GITTENSORY_GATE_CHECK_NAME} passed`,
       summary: "No configured hard blocker was found. Advisory findings, if any, stay advisory.",
       blockers,
       warnings: gateWarnings,
@@ -599,7 +600,7 @@ function evaluateGateCheckCore(advisoryResult: Advisory, policy: GateCheckPolicy
   return {
     enabled: true,
     conclusion: "failure",
-    title: `Gittensory Gate: ${titleDetail}`,
+    title: `${GITTENSORY_GATE_CHECK_NAME}: ${titleDetail}`,
     summary: blockers
       .map((finding) => `${sanitizeForCheckRun(finding.title)}${finding.action ? ` — ${sanitizeForCheckRun(finding.action)}` : ""}`)
       .join("; "),
@@ -612,7 +613,7 @@ export function formatGateCheckOutput(gate: GateCheckEvaluation): { title: strin
   if (gate.conclusion === "success") {
     return {
       title: gate.title,
-      summary: "Gittensory Gate is advisory-first. This PR has no configured hard blocker.",
+      summary: `${GITTENSORY_GATE_CHECK_NAME} is advisory-first. This PR has no configured hard blocker.`,
       text: "No configured hard blocker was found. Advisory signals remain visible in the PR panel when comments are enabled.",
     };
   }
@@ -632,7 +633,7 @@ export function formatGateCheckOutput(gate: GateCheckEvaluation): { title: strin
     // An unbounded title (e.g. when failing-check names are appended) threw a 422 that aborted the ENTIRE
     // review before the comment, audit, and auto-action — so red-CI PRs were never reviewed or closed.
     title: gate.title.slice(0, 255),
-    summary: "Gittensory Gate found a repo-configured hard blocker.",
+    summary: `${GITTENSORY_GATE_CHECK_NAME} found a repo-configured hard blocker.`,
     text: blockerLines.length > 0 ? blockerLines.join("\n") : "A configured hard blocker was found.",
   };
 }
@@ -856,8 +857,8 @@ function isEvaluationBlocker(code: string): boolean {
 }
 
 // Default minimum calibrated confidence for an AI defect to BLOCK (#7) — used when the repo set `aiReview: block`
-// without a `closeConfidence`. 0.9 = block only on a high-confidence AI defect; below that stays advisory.
-const DEFAULT_AI_REVIEW_CLOSE_CONFIDENCE = 0.9;
+// without a `closeConfidence`. 0.93 = block only on a high-confidence AI defect; below that stays advisory.
+const DEFAULT_AI_REVIEW_CLOSE_CONFIDENCE = 0.93;
 
 function isConfiguredGateBlocker(finding: AdvisoryFinding, policy: GateCheckPolicy): boolean {
   const code = finding.code;

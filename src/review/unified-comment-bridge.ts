@@ -26,6 +26,7 @@ import type { CaptureRoute } from "./visual/capture";
 // importers of `PR_PANEL_COMMENT_MARKER` from this module keep working. The unified body MUST prepend this
 // verbatim or `createOrUpdatePrIntelligenceComment` posts a DUPLICATE instead of updating in place.
 import { PR_PANEL_COMMENT_MARKER } from "../github/comments";
+import { GITTENSORY_GATE_CHECK_NAME } from "./check-names";
 import {
   buildUnifiedReviewInput,
   renderUnifiedReviewComment,
@@ -398,7 +399,7 @@ export function buildUnifiedCommentBody(args: UnifiedCommentBridgeArgs): string 
 
 /**
  * Build the unified body for the CLOSED/SKIPPED case (the PR closed before full evaluation). This is the
- * unified-renderer analogue of the legacy `buildClosedPrPanelUpdate` "[!NOTE] Gittensory Gate skipped" panel,
+ * unified-renderer analogue of the legacy `buildClosedPrPanelUpdate` skipped review-agent panel,
  * routed through `buildUnifiedCommentBody` so a comment that started life as a unified OPEN-PR comment keeps
  * its unified shape (and the SAME marker) when the PR closes, instead of being overwritten by the legacy
  * panel under the shared marker. A synthetic `skipped` gate maps (via `gateConclusionToVerdict`) to the
@@ -410,7 +411,7 @@ export function buildClosedUnifiedCommentBody(args: { repoFullName: string; pull
   const skippedGate: GateCheckEvaluation = {
     enabled: true,
     conclusion: "skipped",
-    title: "Gittensory Gate skipped",
+    title: `${GITTENSORY_GATE_CHECK_NAME} skipped`,
     summary: "PR closed before full evaluation. No late first comment was created.",
     blockers: [],
     warnings: [],

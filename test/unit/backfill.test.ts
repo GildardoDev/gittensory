@@ -2883,6 +2883,7 @@ describe("GitHub backfill", () => {
               { name: "test", status: "completed", conclusion: "success" },
               // BOTH bot-posted checks, still in_progress (posted but not yet concluded). Counting EITHER would
               // defer the very review that concludes it — the self-deadlock that froze green-CI PRs as "CI pending".
+              { name: "Gittensory Orb Review Agent", status: "in_progress", conclusion: null, app: { slug: "gittensory" } },
               { name: "Gittensory Gate", status: "in_progress", conclusion: null, app: { slug: "gittensory" } },
               { name: "Gittensory Context", status: "in_progress", conclusion: null, app: { slug: "gittensory" } },
             ],
@@ -2893,7 +2894,7 @@ describe("GitHub backfill", () => {
       });
 
       // Both bot checks are excluded from the CI wait even if listed among the required contexts.
-      const aggregate = await fetchLiveCiAggregate(env, "JSONbored/metagraphed", "headsha", "public-token", new Set(["test", "Gittensory Gate", "Gittensory Context"]));
+      const aggregate = await fetchLiveCiAggregate(env, "JSONbored/metagraphed", "headsha", "public-token", new Set(["test", "Gittensory Orb Review Agent", "Gittensory Gate", "Gittensory Context"]));
 
       expect(aggregate.ciState).toBe("passed"); // would be "pending" if either in_progress bot check were counted
       expect(aggregate.failingDetails).toEqual([]);
@@ -2907,7 +2908,7 @@ describe("GitHub backfill", () => {
           return Response.json({
             check_runs: [
               { name: "test", status: "completed", conclusion: "success", app: { slug: "github-actions" } },
-              { name: "Gittensory Gate", status: "completed", conclusion: "failure", output: { title: "External gate failed" }, app: { slug: "external-ci" } },
+              { name: "Gittensory Orb Review Agent", status: "completed", conclusion: "failure", output: { title: "External gate failed" }, app: { slug: "external-ci" } },
             ],
           });
         }
@@ -2915,10 +2916,10 @@ describe("GitHub backfill", () => {
         return new Response("not found", { status: 404 });
       });
 
-      const aggregate = await fetchLiveCiAggregate(env, "JSONbored/gittensory", "abc123", "public-token", new Set(["test", "Gittensory Gate"]));
+      const aggregate = await fetchLiveCiAggregate(env, "JSONbored/gittensory", "abc123", "public-token", new Set(["test", "Gittensory Orb Review Agent"]));
 
       expect(aggregate.ciState).toBe("failed");
-      expect(aggregate.failingDetails).toEqual([expect.objectContaining({ name: "Gittensory Gate", summary: "External gate failed" })]);
+      expect(aggregate.failingDetails).toEqual([expect.objectContaining({ name: "Gittensory Orb Review Agent", summary: "External gate failed" })]);
     });
 
     it("does not ignore classic statuses named like the Gate", async () => {
@@ -2926,14 +2927,14 @@ describe("GitHub backfill", () => {
       vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
         const url = input.toString();
         if (url.includes("/check-runs?")) return Response.json({ check_runs: [{ name: "test", status: "completed", conclusion: "success", app: { slug: "github-actions" } }] });
-        if (url.includes("/status?")) return Response.json({ statuses: [{ context: "Gittensory Gate", state: "failure", description: "External status failed" }] });
+        if (url.includes("/status?")) return Response.json({ statuses: [{ context: "Gittensory Orb Review Agent", state: "failure", description: "External status failed" }] });
         return new Response("not found", { status: 404 });
       });
 
       const aggregate = await fetchLiveCiAggregate(env, "JSONbored/gittensory", "abc123", "public-token", null);
 
       expect(aggregate.ciState).toBe("failed");
-      expect(aggregate.failingDetails).toEqual([expect.objectContaining({ name: "Gittensory Gate", summary: "External status failed" })]);
+      expect(aggregate.failingDetails).toEqual([expect.objectContaining({ name: "Gittensory Orb Review Agent", summary: "External status failed" })]);
     });
 
     it("treats a required context that never ran (absent from results) as pending, not passed", async () => {
@@ -2973,7 +2974,7 @@ describe("GitHub backfill", () => {
           return Response.json({
             check_runs: [
               { name: "validate", status: "completed", conclusion: "success", app: { slug: "github-actions" } },
-              { name: "Gittensory Gate", status: "in_progress", conclusion: null, app: { slug: "gittensory" } },
+              { name: "Gittensory Orb Review Agent", status: "in_progress", conclusion: null, app: { slug: "gittensory" } },
             ],
           });
         }
@@ -2981,9 +2982,9 @@ describe("GitHub backfill", () => {
         return new Response("not found", { status: 404 });
       });
 
-      const aggregate = await fetchLiveCiAggregate(env, "JSONbored/gittensory", "sha", "tok", new Set(["validate", "Gittensory Gate"]));
+      const aggregate = await fetchLiveCiAggregate(env, "JSONbored/gittensory", "sha", "tok", new Set(["validate", "Gittensory Orb Review Agent"]));
 
-      // "Gittensory Gate" is a bot check: present in results (so not absent), excluded from gate logic → passed
+      // "Gittensory Orb Review Agent" is a bot check: present in results (so not absent), excluded from gate logic → passed
       expect(aggregate.ciState).toBe("passed");
     });
 

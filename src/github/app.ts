@@ -18,6 +18,16 @@ import {
   type GateCheckEvaluation,
   type GateCheckPolicy,
 } from "../rules/advisory";
+import {
+  GITTENSORY_CONTEXT_CHECK_NAME,
+  GITTENSORY_GATE_CHECK_NAME,
+} from "../review/check-names";
+
+export {
+  GITTENSORY_CONTEXT_CHECK_NAME,
+  GITTENSORY_GATE_CHECK_NAME,
+  GITTENSORY_LEGACY_GATE_CHECK_NAME,
+} from "../review/check-names";
 
 type CheckRunResponse = {
   id: number;
@@ -37,9 +47,6 @@ type CheckRunListResponse = {
 export type CheckRunOutcome =
   | { kind: "published"; id: number; html_url?: string }
   | { kind: "permission_missing"; warning: string };
-
-export const GITTENSORY_CONTEXT_CHECK_NAME = "Gittensory Context";
-export const GITTENSORY_GATE_CHECK_NAME = "Gittensory Gate";
 
 type GitHubCheckConclusion =
   | Advisory["conclusion"]
@@ -508,7 +515,7 @@ export async function createOrUpdateGateCheckRun(
   mode: AgentActionMode = "live",
 ): Promise<CheckRunOutcome | null> {
   // Prefer the AUTHORITATIVE pre-computed evaluation when the caller has one (#5 / audit): the surface/content
-  // lane can OVERRIDE the generic verdict (surface_lane_reject → failure, surface_lane_manual → action_required),
+  // lane can OVERRIDE the generic verdict (surface_lane_reject → failure, surface_lane_manual → neutral),
   // and re-deriving here via evaluateGateCheck would discard that override — publishing a GREEN check while the
   // PR is actually auto-closed/held. Callers without a surface lane omit `gate` and re-derive as before (identical).
   const gate = options.gate ?? evaluateGateCheck(advisory, policy);
@@ -544,10 +551,10 @@ export async function createOrUpdatePendingGateCheckRun(
       name: GITTENSORY_GATE_CHECK_NAME,
       status: "in_progress",
       output: {
-        title: "Gittensory Gate is evaluating",
+        title: "Gittensory Orb Review Agent is evaluating",
         summary:
           "Gittensory is running deterministic public PR hygiene checks.",
-        text: "The Gate blocks every author on the repo's configured hard blockers (duplicate PRs by default); on everything else, and while state is still syncing, it stays advisory.",
+        text: "The review agent blocks every author on the repo's configured hard blockers (duplicate PRs by default); on everything else, and while state is still syncing, it stays advisory.",
       },
       updateExisting: "in_progress_only",
       mode,
@@ -573,7 +580,7 @@ export async function createOrUpdateSkippedGateCheckRun(
       status: "completed",
       conclusion: "skipped",
       output: {
-        title: "Gittensory Gate skipped",
+        title: "Gittensory Orb Review Agent skipped",
         summary: reason,
         text: "Gittensory does not post late first comments on closed or merged pull requests.",
       },
@@ -585,7 +592,7 @@ export async function createOrUpdateSkippedGateCheckRun(
 /**
  * Finalize a previously-posted pending Gate check to a NEUTRAL (non-blocking) terminal state when the
  * evaluation could not finish (a transient error/timeout in the work between posting the pending check and
- * completing it). This guarantees the "Gittensory Gate is evaluating" run never hangs in_progress forever;
+ * completing it). This guarantees the "Gittensory Orb Review Agent is evaluating" run never hangs in_progress forever;
  * it does not block the PR and re-runs on the next push. Targets the known pending check_run id so it
  * updates the SAME run rather than creating a second one.
  */
@@ -607,10 +614,10 @@ export async function createOrUpdateErroredGateCheckRun(
       status: "completed",
       conclusion: "neutral",
       output: {
-        title: "Gittensory Gate — could not finish evaluating",
+        title: "Gittensory Orb Review Agent — could not finish evaluating",
         summary:
           "A transient error interrupted gate evaluation. This does NOT block the PR and re-runs automatically on the next push.",
-        text: "Gittensory finalizes the Gate to a neutral, non-blocking state when evaluation is interrupted, so the check never hangs in_progress. Push a new commit or use the 'Re-run Gittensory review' checkbox to re-evaluate.",
+        text: "Gittensory finalizes the review-agent check to a neutral, non-blocking state when evaluation is interrupted, so the check never hangs in_progress. Push a new commit or use the 'Re-run Gittensory review' checkbox to re-evaluate.",
       },
       checkRunId: options.checkRunId,
       mode,
@@ -642,9 +649,9 @@ export async function createOrUpdateOverriddenGateCheckRun(
       status: "completed",
       conclusion: "neutral",
       output: {
-        title: `Gittensory Gate — overridden by @${options.actor}`,
+        title: `Gittensory Orb Review Agent — overridden by @${options.actor}`,
         summary:
-          "A maintainer set the Gate to neutral for THIS commit only. This does NOT permanently bypass the Gate; a new push re-evaluates it.",
+          "A maintainer set the review-agent check to neutral for THIS commit only. This does NOT permanently bypass the review agent; a new push re-evaluates it.",
         text: `Overridden by @${options.actor}: ${options.reason}`,
       },
       checkRunId: options.checkRunId,

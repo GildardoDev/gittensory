@@ -64,7 +64,7 @@ describe("buildPredictedGateVerdict", () => {
     expect(result.conclusion).toBe("failure");
     expect(result.blockers.some((b) => b.code === "duplicate_pr_risk")).toBe(true);
     // Public-safe: blocker text carries a fix and no raw internal markers.
-    expect(result.title.toLowerCase()).toContain("gittensory gate");
+    expect(result.title.toLowerCase()).toContain("gittensory orb review agent");
   });
 
   it("does NOT block on a duplicate when duplicates:off", () => {

@@ -224,7 +224,7 @@ describe("advisory rules", () => {
     expect(gate.conclusion).toBe("success");
     expect(gate.blockers).toEqual([]);
     expect(gate.warnings.map((finding) => finding.code)).not.toContain("busy_pr_queue");
-    expect(output.title).toBe("Gittensory Gate passed");
+    expect(output.title).toBe("Gittensory Orb Review Agent passed");
     expect(output.text).toContain("No configured hard blocker");
   });
 
@@ -238,7 +238,7 @@ describe("advisory rules", () => {
     expect(advisory.findings.map((finding) => finding.code)).toEqual(expect.arrayContaining(["repo_not_registered", "pr_not_cached"]));
     expect(gate.conclusion).toBe("neutral");
     expect(gate.blockers).toEqual([]);
-    expect(output.title).toBe("Gittensory Gate — not evaluated yet");
+    expect(output.title).toBe("Gittensory Orb Review Agent — not evaluated yet");
     expect(output.summary).toContain("re-evaluates automatically");
     expect(output.text).toBe("Gittensory did not create a contributor-facing failure for this event.");
   });
@@ -358,7 +358,7 @@ describe("advisory rules", () => {
 
     expect(gate.conclusion).toBe("failure");
     // Title names the blocker count; summary enumerates every active blocker with its fix.
-    expect(gate.title).toBe("Gittensory Gate: 2 blockers");
+    expect(gate.title).toBe("Gittensory Orb Review Agent: 2 blockers");
     expect(gate.summary).toContain("No linked issue detected");
     expect(gate.summary).toContain("Linked issue overlaps another open PR");
     expect(gate.summary).not.toContain("Readiness score is below the configured threshold");
@@ -376,7 +376,7 @@ describe("advisory rules", () => {
     // neutral/held state. Confirmed-status affects only on-chain scoring, never the gate verdict. (#gate-nonconfirmed)
     const nonConfirmed = evaluateGateCheck(blockingAdvisory, { duplicatePrGateMode: "block", confirmedContributor: false });
     expect(nonConfirmed.conclusion).toBe("failure");
-    expect(nonConfirmed.title).toBe("Gittensory Gate: Linked issue overlaps another open PR");
+    expect(nonConfirmed.title).toBe("Gittensory Orb Review Agent: Linked issue overlaps another open PR");
     expect(nonConfirmed.blockers.map((finding) => finding.code)).toEqual(["duplicate_pr_risk"]);
 
     // Confirmed author with the same blocker: identical verdict.
@@ -394,7 +394,7 @@ describe("advisory rules", () => {
       const output = formatGateCheckOutput({
         enabled: true,
         conclusion,
-        title: conclusion === "skipped" ? "Gittensory Gate skipped" : "Gittensory Gate neutral",
+        title: conclusion === "skipped" ? "Gittensory Orb Review Agent skipped" : "Gittensory Orb Review Agent neutral",
         summary: "PR closed before full evaluation.",
         blockers: [],
         warnings: [],
@@ -409,7 +409,7 @@ describe("advisory rules", () => {
     const output = formatGateCheckOutput({
       enabled: true,
       conclusion: "failure",
-      title: "Gittensory Gate is blocking merge",
+      title: "Gittensory Orb Review Agent is blocking merge",
       summary: "A configured merge-blocking issue was found.",
       blockers: [],
       warnings: [],
@@ -1083,7 +1083,7 @@ describe("CI-refutation of the public comment gate (#ai-ci-refutation)", () => {
   const failure = (codes: string[]): import("../../src/rules/advisory").GateCheckEvaluation => ({
     enabled: true,
     conclusion: "failure",
-    title: "Gittensory Gate: blocked",
+    title: "Gittensory Orb Review Agent: blocked",
     summary: "A hard blocker was found.",
     blockers: codes.map(finding),
     warnings: [],
@@ -1106,7 +1106,7 @@ describe("CI-refutation of the public comment gate (#ai-ci-refutation)", () => {
     const out = reconcileGateEvaluationForGreenCi(failure(["ai_consensus_defect"]), "passed", true);
     expect(out.conclusion).toBe("success");
     expect(out.blockers).toEqual([]);
-    expect(out.title).toBe("Gittensory Gate passed");
+    expect(out.title).toBe("Gittensory Orb Review Agent passed");
     expect(out.summary).toContain("advisory, not blocking");
   });
 

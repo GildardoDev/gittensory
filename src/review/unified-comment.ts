@@ -252,9 +252,14 @@ export function deriveUnifiedStatus(input: UnifiedReviewInput, ctx: UnifiedComme
     else if ((input.failedCount ?? 0) > 0 || recs.some((r) => r !== "merge")) status = "held";
     else status = "ready";
   }
-  // Readiness is advisory for the Gittensory verdict. A PR is not "safe to merge" until CI is green, but
-  // CI/merge-state evidence must not create a red/blocked Gittensory decision by itself; the blocker has to
-  // come from the review disposition (`close`) or consensus review findings.
+  // CI failure is an objective failing review state even when the disposition cannot auto-close the PR
+  // (for example, JSONbored/owner-authored PRs). The action wording below still respects `neverClosed`, so this
+  // renders as a red fix-required/manual-follow-up state without suggesting an owner PR will be rejected/closed.
+  if (input.readiness?.ciState === "failed") {
+    return "blocked";
+  }
+  // Readiness is otherwise advisory for the Gittensory verdict. A PR is not "safe to merge" until CI is green,
+  // but pending/unverified CI should hold rather than create a red/blocked Gittensory decision by itself.
   if (status === "ready" && input.readiness && input.readiness.ciState !== "passed") {
     return "held";
   }
@@ -273,18 +278,16 @@ export function deriveUnifiedStatus(input: UnifiedReviewInput, ctx: UnifiedComme
   // CI / merge-state / gate block above still wins. (#guarded-hold-comment)
   if (status === "ready" && ctx.heldForReview) return "held";
   // Held-vs-closed disposition parity (#8/#9): a gate "close" verdict does NOT always close the PR. An
-  // owner/automation-bot author is NEVER auto-closed, and a guarded-path PR is held for owner review UNLESS a
-  // RED required check forces the close (ciState "failed" mirrors the disposition's redVerifiedRequiredCi). Render
-  // those as "held" so the headline matches the action (#4220 class); a genuine contributor close — red required
-  // CI, or a non-guarded block — still headlines "Closed".
+  // owner/automation-bot author is NEVER auto-closed, and a guarded-path PR is held for owner review. Failed CI
+  // returned the red blocked status above, so the remaining close/held cases are green-or-pending manual holds.
   if (input.decision === "close") {
     if (ctx.neverClosed) return "held";
-    if (ctx.heldForReview && input.readiness?.ciState !== "failed") return "held";
+    if (ctx.heldForReview) return "held";
   }
   return status;
 }
 
-function headlineLabel(status: UnifiedCommentStatus, input: UnifiedReviewInput): string {
+function headlineLabel(status: UnifiedCommentStatus, input: UnifiedReviewInput, ctx: UnifiedCommentContext): string {
   switch (status) {
     case "ready":
       return "approve/merge recommended";
@@ -293,7 +296,7 @@ function headlineLabel(status: UnifiedCommentStatus, input: UnifiedReviewInput):
     case "held":
       return "manual review recommended";
     case "blocked":
-      return input.decision === "close" ? "reject/close recommended" : "blockers found";
+      return input.decision === "close" && !ctx.neverClosed ? "reject/close recommended" : "fixes required";
   }
 }
 
@@ -315,20 +318,29 @@ function statusChips(input: UnifiedReviewInput, ctx: UnifiedCommentContext): str
   return chips.join(" · ");
 }
 
-function verdictLine(status: UnifiedCommentStatus, input: UnifiedReviewInput): string {
+function verdictLine(status: UnifiedCommentStatus, input: UnifiedReviewInput, ctx: UnifiedCommentContext): string {
   const icon = STATUS_META[status].icon;
-  const reason = input.verdictReason ? ` — ${escapePublicHtmlAngles(input.verdictReason)}` : "";
+  const reasons = (defaultReason?: string) => {
+    const raw = input.verdictReason?.trim() || defaultReason?.trim() || "";
+    return raw ? `\n${actionReasonBullets(raw)}` : "";
+  };
   switch (status) {
     case "ready":
       return input.merged
-        ? `**${icon} Suggested Action - Approve/Merge**${input.verdictReason ? reason : " — auto-merged"}`
-        : `**${icon} Suggested Action - Approve/Merge**${input.verdictReason ? reason : " — safe to merge"}`;
+        ? `**${icon} Suggested Action - Approve/Merge**${reasons("auto-merged")}`
+        : `**${icon} Suggested Action - Approve/Merge**${reasons("safe to merge")}`;
     case "advisory":
-      return `**${icon} Suggested Action - Advisory Only**${input.verdictReason ? reason : " — no action taken"}`;
+      return `**${icon} Suggested Action - Advisory Only**${reasons("no action taken")}`;
     case "held":
-      return `**${icon} Suggested Action - Manual Review**${reason}`;
+      return `**${icon} Suggested Action - Manual Review**${reasons()}`;
     case "blocked":
-      return `**${icon} Suggested Action - ${input.decision === "close" ? "Reject/Close" : "Fix Blockers"}**${reason}`;
+      if (ctx.neverClosed) {
+        return `**${icon} Suggested Action - Manual Review**${reasons()}`;
+      }
+      if (input.decision === "close" && !ctx.neverClosed) {
+        return `**${icon} Suggested Action - Reject/Close**${reasons()}`;
+      }
+      return `**${icon} Suggested Action - Fix Blockers**${reasons()}`;
   }
 }
 
@@ -363,6 +375,16 @@ function bullets(items: string[]): string {
 function taskList(items: string[]): string {
   return dedupeLines(items)
     .map((i) => `- [ ] ${escapePublicHtmlAngles(i)}`)
+    .join("\n");
+}
+
+function actionReasonBullets(reason: string): string {
+  const reasons = reason
+    .split(/[;\n]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return dedupeLines(reasons, 8)
+    .map((item) => `- ${escapePublicHtmlAngles(item)}`)
     .join("\n");
 }
 
@@ -453,15 +475,15 @@ export function renderUnifiedReviewComment(input: UnifiedReviewInput, ctx: Unifi
   const status = deriveUnifiedStatus(input, ctx);
   const meta = STATUS_META[status];
   const brand = escapePublicHtmlAngles(ctx.brand ?? "Gittensory review");
+  const reviewTimestamp = formatReviewTimestamp(ctx.reviewedAt);
 
   const blocks: string[] = [
     meta.square.repeat(12),
-    `### ${meta.icon} ${brand} result - ${headlineLabel(status, input)}${status === "ready" && input.merged ? " · auto-merged" : ""}`,
+    `### ${meta.icon} ${brand} result - ${headlineLabel(status, input, ctx)}${status === "ready" && input.merged ? " · auto-merged" : ""}`,
+    ...(reviewTimestamp ? [`<sub>Review updated: ${reviewTimestamp}</sub>`] : []),
     statusChips(input, ctx),
-    verdictLine(status, input),
+    verdictLine(status, input, ctx),
   ];
-  const reviewTimestamp = formatReviewTimestamp(ctx.reviewedAt);
-  if (reviewTimestamp) blocks.push(`<sub>Review updated: ${reviewTimestamp}</sub>`);
 
   if (input.summary.trim()) blocks.push(`**Review summary**\n${escapePublicHtmlAngles(input.summary.trim())}`);
 

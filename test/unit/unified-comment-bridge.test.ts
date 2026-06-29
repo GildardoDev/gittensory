@@ -22,7 +22,7 @@ function gate(over: Partial<GateCheckEvaluation> = {}): GateCheckEvaluation {
   return {
     enabled: true,
     conclusion: "success",
-    title: "Gittensory Gate passed",
+    title: "Gittensory Orb Review Agent passed",
     summary: "No configured hard blocker was found.",
     blockers: [],
     warnings: [],
@@ -265,7 +265,7 @@ describe("buildUnifiedCommentBody", () => {
     const failing = buildUnifiedCommentBody({
       gate: gate({
         conclusion: "failure",
-        title: "Gittensory Gate: blocked",
+        title: "Gittensory Orb Review Agent: blocked",
         summary: "A hard blocker was found.",
         blockers: [{ code: "ai_consensus_defect", severity: "critical", title: "Real bug", detail: "..." }],
       }),
@@ -339,7 +339,7 @@ describe("buildUnifiedCommentBody", () => {
     expect(held).not.toContain("> [!TIP]");
   });
 
-  it("neverClosed renders a gate-failure (close) PR as HELD, not reject/close (#8/#9)", () => {
+  it("neverClosed renders a gate-failure (close) PR as HELD when CI is green, not reject/close (#8/#9)", () => {
     const args = { gate: gate({ conclusion: "failure" }), panelRows, readinessTotal: 40, changedFiles: 2, mergeReadiness: { ciState: "passed" as const }, footerMarkdown: footer };
     // A contributor close → the red reject/close recommendation.
     const closed = buildUnifiedCommentBody(args);
@@ -349,6 +349,22 @@ describe("buildUnifiedCommentBody", () => {
     expect(held).toContain("> [!WARNING]");
     expect(held).toContain("Suggested Action - Manual Review");
     expect(held).not.toContain("Suggested Action - Reject/Close");
+  });
+
+  it("neverClosed still renders failed CI as a red manual-review result", () => {
+    const body = buildUnifiedCommentBody({
+      gate: gate({ conclusion: "failure" }),
+      panelRows,
+      readinessTotal: 40,
+      changedFiles: 2,
+      mergeReadiness: { ciState: "failed", failingChecks: ["test"] },
+      footerMarkdown: footer,
+      neverClosed: true,
+    });
+    expect(body).toContain("> [!CAUTION]");
+    expect(body).toContain("Suggested Action - Manual Review");
+    expect(body).toContain("CI checks failing");
+    expect(body).not.toContain("Suggested Action - Reject/Close");
   });
 });
 
@@ -435,7 +451,7 @@ describe("single AI pass: the bridge RECOVERS the consensus defect, never re-der
     const body = buildUnifiedCommentBody({
       gate: gate({
         conclusion: "failure",
-        title: "Gittensory Gate: blocked",
+        title: "Gittensory Orb Review Agent: blocked",
         summary: "A hard blocker was found.",
         // The gate's own blockers list carries the defect (as evaluateGateCheck produced it)…
         blockers: [{ code: "ai_consensus_defect", severity: "critical", title: defectTitle, detail: "Both models agree." }],
@@ -476,7 +492,7 @@ describe("gate blockers render in 'Why this is blocked' (FIX D1)", () => {
     const body = buildUnifiedCommentBody({
       gate: gate({
         conclusion: "failure",
-        title: "Gittensory Gate: blocked",
+        title: "Gittensory Orb Review Agent: blocked",
         summary: "A hard blocker was found.",
         // A non-AI gate failure (no ai_consensus_defect anywhere) — the consensus defect alone would have left
         // "Why this is blocked" empty. The gate blocker must now render.
@@ -553,7 +569,7 @@ describe("gate blockers render in 'Why this is blocked' (FIX D1)", () => {
 describe("verdictReason on a held/blocked headline (FIX D2)", () => {
   it("appends the gate summary to a BLOCKED (close) verdict headline", () => {
     const body = buildUnifiedCommentBody({
-      gate: gate({ conclusion: "failure", title: "Gittensory Gate: blocked", summary: "A hard blocker was found." }),
+      gate: gate({ conclusion: "failure", title: "Gittensory Orb Review Agent: blocked", summary: "A hard blocker was found." }),
       panelRows,
       readinessTotal: 30,
       changedFiles: 2,
@@ -565,7 +581,7 @@ describe("verdictReason on a held/blocked headline (FIX D2)", () => {
 
   it("appends the gate summary to a HELD (manual) verdict headline", () => {
     const body = buildUnifiedCommentBody({
-      gate: gate({ conclusion: "action_required", title: "Gittensory Gate — needs review", summary: "Manual maintainer review required." }),
+      gate: gate({ conclusion: "action_required", title: "Gittensory Orb Review Agent — needs review", summary: "Manual maintainer review required." }),
       panelRows,
       readinessTotal: 55,
       changedFiles: 2,
@@ -577,18 +593,18 @@ describe("verdictReason on a held/blocked headline (FIX D2)", () => {
 
   it("falls back to the gate TITLE when the summary is empty", () => {
     const body = buildUnifiedCommentBody({
-      gate: gate({ conclusion: "failure", title: "Gittensory Gate: blocked by policy", summary: "  " }),
+      gate: gate({ conclusion: "failure", title: "Gittensory Orb Review Agent: blocked by policy", summary: "  " }),
       panelRows,
       readinessTotal: 20,
       changedFiles: 2,
       footerMarkdown: footer,
     });
-    expect(body).toContain("Gittensory Gate: blocked by policy");
+    expect(body).toContain("Gittensory Orb Review Agent: blocked by policy");
   });
 
   it("does NOT overwrite the positive ready wording on a passing (merge) verdict", () => {
     const body = buildUnifiedCommentBody({
-      gate: gate({ conclusion: "success", title: "Gittensory Gate passed", summary: "No configured hard blocker was found." }),
+      gate: gate({ conclusion: "success", title: "Gittensory Orb Review Agent passed", summary: "No configured hard blocker was found." }),
       panelRows,
       readinessTotal: 90,
       changedFiles: 2,
@@ -659,7 +675,7 @@ describe("privacy invariant: the private 'Maintainer notes' internals never reac
     const body = buildUnifiedCommentBody({
       gate: gate({
         conclusion: "failure",
-        title: "Gittensory Gate: blocked",
+        title: "Gittensory Orb Review Agent: blocked",
         summary: "A hard blocker was found.",
         blockers: [
           { code: "ai_consensus_defect", severity: "critical", title: "Real bug", detail: "Both agree." },
@@ -756,7 +772,7 @@ describe("buildClosedUnifiedCommentBody (closed/skipped PR through the unified r
   it("renders the non-blocking skipped state (skipped → comment verdict → advisory, not a CAUTION block)", () => {
     const body = buildClosedUnifiedCommentBody({ repoFullName: "octo/repo", pullNumber: 7, footerMarkdown: footer });
     // skipped maps to the `comment` verdict (gateConclusionToVerdict) → advisory tone, mirroring the legacy
-    // "[!NOTE] Gittensory Gate skipped" panel. It must NOT read as a blocked/closed CAUTION.
+    // "[!NOTE] Gittensory Orb Review Agent skipped" panel. It must NOT read as a blocked/closed CAUTION.
     expect(body).not.toContain("> [!CAUTION]");
     expect(body).toContain("Skipped");
     expect(body).toContain("octo/repo#7 is no longer open.");

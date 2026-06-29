@@ -31,6 +31,7 @@ import { isDuplicateClusterWinner } from "./duplicate-winner";
 import { PREFLIGHT_LIMITS } from "./preflight-limits";
 import type { UnifiedCollapsible } from "../review/unified-comment";
 import { splitAiReviewNits } from "../review/ai-notes";
+import { GITTENSORY_GATE_CHECK_NAME } from "../review/check-names";
 
 export type ParticipationLane = "direct_pr" | "issue_discovery" | "split" | "inactive" | "unknown";
 export type SignalFinding = AdvisoryFinding;
@@ -4250,7 +4251,7 @@ export function buildPublicPrIntelligenceComment(args: {
     : args.aiReview && !gateBlocking
       ? "Gittensory review approved this PR"
       : gateBlocking
-        ? "Gittensory Gate is blocking merge"
+        ? `${GITTENSORY_GATE_CHECK_NAME} is blocking merge`
         : hasPublicWarnings || hasRelatedWork
           ? "Gittensory found maintainer review notes"
           : "Gittensory PR readiness looks good";

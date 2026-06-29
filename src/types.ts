@@ -526,7 +526,7 @@ export type RepositorySettings = {
   /** Merge-readiness gate (#merge-readiness). `off`/`advisory`/`block`. No min-score. Default `off`. */
   mergeReadinessGateMode: GateRuleMode;
   /** Focus-manifest policy gate (#555). When `block`, the focus manifest's declared policy (blocked paths,
-   *  required-linked-issue, test expectations) becomes an enforceable `Gittensory Gate` blocker. An
+   *  required-linked-issue, test expectations) becomes an enforceable review-agent blocker. An
    *  INDEPENDENT dimension, deliberately not folded into the merge-readiness composite. Default `off` — opt-in. */
   manifestPolicyGateMode: GateRuleMode;
   /** Self-authored linked-issue gate. When `block`, the gate closes a PR where the contributor also
@@ -569,7 +569,7 @@ export type RepositorySettings = {
   /** Minimum calibrated AI-reviewer confidence (0-1) for an AI defect to BLOCK under `aiReviewMode: block` (#7).
    *  A dual-model consensus defect / split blocks only when its finding `confidence >= aiReviewCloseConfidence`;
    *  below-threshold AI defects hold for human review rather than passing. Config-as-code only — set via
-   *  `.gittensory.yml gate.aiReview.closeConfidence` (no dashboard/DB column); unset ⇒ the gate uses the 0.9
+   *  `.gittensory.yml gate.aiReview.closeConfidence` (no dashboard/DB column); unset ⇒ the gate uses the 0.93
    *  default. Clamped to [0,1] at parse time. */
   aiReviewCloseConfidence?: number | null | undefined;
   /** When TRUE, the repo OWNER's (and maintainer's) own PRs are eligible for auto-CLOSE like a contributor's

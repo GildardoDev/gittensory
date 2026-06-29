@@ -2041,7 +2041,7 @@ describe("queue processors", () => {
       if (url.includes("/commits/gate123/check-runs")) return Response.json({ total_count: 0, check_runs: [] });
       if (url.includes("/check-runs") && (init?.method ?? "GET") === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as { name?: string; status?: string; conclusion?: string; output?: { title?: string } };
-        expect(body).toMatchObject({ name: "Gittensory Gate", status: "in_progress", output: { title: "Gittensory Gate is evaluating" } });
+        expect(body).toMatchObject({ name: "Gittensory Orb Review Agent", status: "in_progress", output: { title: "Gittensory Orb Review Agent is evaluating" } });
         expect(body.conclusion).toBeUndefined();
         calls.gateChecks += 1;
         return Response.json({ id: 900 }, { status: 201 });
@@ -2049,7 +2049,7 @@ describe("queue processors", () => {
       if (url.includes("/check-runs/900") && (init?.method ?? "GET") === "PATCH") {
         const body = JSON.parse(String(init?.body ?? "{}")) as { name?: string; status?: string; conclusion?: string; output?: { title?: string } };
         // Non-confirmed author + linked-issue block + no issue → gated normally → failure (#gate-nonconfirmed).
-        expect(body).toMatchObject({ name: "Gittensory Gate", status: "completed", conclusion: "failure", output: { title: "Gittensory Gate: No linked issue detected" } });
+        expect(body).toMatchObject({ name: "Gittensory Orb Review Agent", status: "completed", conclusion: "failure", output: { title: "Gittensory Orb Review Agent: No linked issue detected" } });
         calls.gateChecks += 1;
         return Response.json({ id: 900 });
       }
@@ -2329,7 +2329,7 @@ describe("queue processors", () => {
     let gateConclusion: string | undefined;
     let gateText = "";
     const captureGate = (body: { name?: string; conclusion?: string; output?: { title?: string; summary?: string } }) => {
-      if ((body.name ?? "").includes("Gittensory Gate") && body.conclusion) {
+      if ((body.name ?? "").includes("Gittensory Orb Review Agent") && body.conclusion) {
         gateConclusion = body.conclusion;
         gateText = `${body.output?.title ?? ""} ${body.output?.summary ?? ""}`;
       }
@@ -3088,7 +3088,7 @@ describe("queue processors", () => {
       }
       if (url.includes("/check-runs") && method === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as { status?: string; conclusion?: string; output?: { title?: string } };
-        expect(body).toMatchObject({ status: "in_progress", output: { title: "Gittensory Gate is evaluating" } });
+        expect(body).toMatchObject({ status: "in_progress", output: { title: "Gittensory Orb Review Agent is evaluating" } });
         expect(body.conclusion).toBeUndefined();
         calls.gateChecks += 1;
         return Response.json({ id: 910 }, { status: 201 });
@@ -3096,7 +3096,7 @@ describe("queue processors", () => {
       if (url.includes("/check-runs/910") && method === "PATCH") {
         const body = JSON.parse(String(init?.body ?? "{}")) as { status?: string; conclusion?: string; output?: { title?: string } };
         // The bot author is gated normally now (no confirmation gate); linked-issue block + no issue → failure (#gate-nonconfirmed).
-        expect(body).toMatchObject({ status: "completed", conclusion: "failure", output: { title: "Gittensory Gate: No linked issue detected" } });
+        expect(body).toMatchObject({ status: "completed", conclusion: "failure", output: { title: "Gittensory Orb Review Agent: No linked issue detected" } });
         calls.gateChecks += 1;
         return Response.json({ id: 910 });
       }
@@ -3160,7 +3160,7 @@ describe("queue processors", () => {
       }
       if (url.includes("/check-runs") && method === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as { status?: string; conclusion?: string; output?: { title?: string } };
-        expect(body).toMatchObject({ status: "in_progress", output: { title: "Gittensory Gate is evaluating" } });
+        expect(body).toMatchObject({ status: "in_progress", output: { title: "Gittensory Orb Review Agent is evaluating" } });
         expect(body.conclusion).toBeUndefined();
         calls.gateChecks += 1;
         return Response.json({ id: 920 }, { status: 201 });
@@ -3168,7 +3168,7 @@ describe("queue processors", () => {
       if (url.includes("/check-runs/920") && method === "PATCH") {
         const body = JSON.parse(String(init?.body ?? "{}")) as { status?: string; conclusion?: string; output?: { title?: string } };
         // The unconfirmed miner is gated normally now; linked-issue block + no issue → failure (#gate-nonconfirmed).
-        expect(body).toMatchObject({ status: "completed", conclusion: "failure", output: { title: "Gittensory Gate: No linked issue detected" } });
+        expect(body).toMatchObject({ status: "completed", conclusion: "failure", output: { title: "Gittensory Orb Review Agent: No linked issue detected" } });
         calls.gateChecks += 1;
         return Response.json({ id: 920 });
       }
@@ -3332,7 +3332,7 @@ describe("queue processors", () => {
     expect(calls.minerList).toBe(1);
     expect(calls.gateChecks).toBe(2);
     expect(gatePatchBody.conclusion).toBe("failure");
-    expect(gatePatchBody.output?.title).toBe("Gittensory Gate: No linked issue detected");
+    expect(gatePatchBody.output?.title).toBe("Gittensory Orb Review Agent: No linked issue detected");
   });
 
   it("hard-blocks a confirmed contributor on a dual-model AI consensus defect when aiReview: block is opted in", async () => {
@@ -3473,7 +3473,7 @@ describe("queue processors", () => {
     const finalize = patchBodies[1];
     expect(finalize?.status).toBe("completed");
     expect(finalize?.conclusion).toBe("neutral");
-    expect(finalize?.output?.title).toBe("Gittensory Gate — could not finish evaluating");
+    expect(finalize?.output?.title).toBe("Gittensory Orb Review Agent — could not finish evaluating");
     const audit = await env.DB.prepare("select outcome from audit_events where event_type = ? and target_key = ?")
       .bind("github_app.gate_check_failed_nonfatal", "JSONbored/gittensory#80")
       .first<{ outcome: string }>();
@@ -3663,7 +3663,7 @@ describe("queue processors", () => {
       if (url.includes("/commits/closed123/check-runs")) return Response.json({ total_count: 0, check_runs: [] });
       if (url.includes("/check-runs") && method === "POST") {
         const body = JSON.parse(String(init?.body ?? "{}")) as { name?: string; status?: string; conclusion?: string; output?: { title?: string } };
-        expect(body).toMatchObject({ name: "Gittensory Gate", status: "completed", conclusion: "skipped", output: { title: "Gittensory Gate skipped" } });
+        expect(body).toMatchObject({ name: "Gittensory Orb Review Agent", status: "completed", conclusion: "skipped", output: { title: "Gittensory Orb Review Agent skipped" } });
         calls.gateWrites += 1;
         return Response.json({ id: 901 }, { status: 201 });
       }
@@ -7361,7 +7361,7 @@ describe("queue processors", () => {
       }
       if (url.includes("/commits/override-sha/check-runs") && method === "GET") {
         calls.checkGets += 1;
-        return Response.json({ total_count: 1, check_runs: [{ id: 555, name: "Gittensory Gate" }] });
+        return Response.json({ total_count: 1, check_runs: [{ id: 555, name: "Gittensory Orb Review Agent" }] });
       }
       if (url.includes("/check-runs/555") && method === "PATCH") {
         calls.checkPatches += 1;
@@ -7400,9 +7400,9 @@ describe("queue processors", () => {
     const finalize = patchBodies[0];
     expect(finalize?.status).toBe("completed");
     expect(finalize?.conclusion).toBe("neutral");
-    expect(finalize?.output?.title).toBe("Gittensory Gate — overridden by @maintainer");
+    expect(finalize?.output?.title).toBe("Gittensory Orb Review Agent — overridden by @maintainer");
     expect(finalize?.output?.text).toContain("Overridden by @maintainer: known flaky duplicate check, shipping");
-    expect(confirmationBody).toContain("Gittensory Gate overridden by @maintainer");
+    expect(confirmationBody).toContain("Gittensory Orb Review Agent overridden by @maintainer");
     const audit = await env.DB.prepare("select event_type, actor, target_key, outcome, detail from audit_events where event_type = ?")
       .bind("github_app.gate_overridden")
       .first<{ event_type: string; actor: string; target_key: string; outcome: string; detail: string }>();
@@ -7455,7 +7455,7 @@ describe("queue processors", () => {
       }
       if (url.includes("/commits/live-sha/check-runs") && method === "GET") {
         seen.liveCheckGets += 1;
-        return Response.json({ total_count: 1, check_runs: [{ id: 556, name: "Gittensory Gate" }] });
+        return Response.json({ total_count: 1, check_runs: [{ id: 556, name: "Gittensory Orb Review Agent" }] });
       }
       if (url.includes("/check-runs/556") && method === "PATCH") {
         patchBodies.push(JSON.parse(String(init?.body ?? "{}")) as { conclusion?: string });
@@ -7585,7 +7585,7 @@ describe("queue processors", () => {
       }
       if (url.includes("/check-runs")) {
         calls.checkRuns += 1;
-        return Response.json({ total_count: 1, check_runs: [{ id: 556, name: "Gittensory Gate" }] });
+        return Response.json({ total_count: 1, check_runs: [{ id: 556, name: "Gittensory Orb Review Agent" }] });
       }
       if (url.includes("/comments")) {
         calls.comments += 1;

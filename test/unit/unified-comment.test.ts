@@ -38,10 +38,10 @@ describe("deriveUnifiedStatus", () => {
     expect(deriveUnifiedStatus({ ...base, recommendations: ["request_changes"] })).toBe("held");
   });
 
-  it("CI readiness is advisory for Gittensory — failed/pending holds, but never blocks a merge verdict", () => {
-    // Red CI must never render "safe to merge", but CI itself is not a Gittensory blocker.
-    expect(deriveUnifiedStatus({ ...base, readiness: { ciState: "failed" } })).toBe("held");
-    expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "failed" } })).toBe("held");
+  it("failed CI is a failing review result; pending CI holds but does not block", () => {
+    // Red CI must never render "safe to merge"; it is a failing review result even if the PR cannot auto-close.
+    expect(deriveUnifiedStatus({ ...base, readiness: { ciState: "failed" } })).toBe("blocked");
+    expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "failed" } })).toBe("blocked");
     // CI still running / not yet reported (chip "CI pending") → HELD, never "safe to merge".
     expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "unverified" } })).toBe("held");
     // ONLY green CI + a merge verdict renders ready.
@@ -81,10 +81,10 @@ describe("deriveUnifiedStatus", () => {
     expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "passed" } }, { heldForReview: false })).toBe("ready");
   });
 
-  it("renders a non-closing disposition as held, not Closed (#8/#9)", () => {
-    // #9: an owner / automation-bot author is NEVER auto-closed → a gate "close" verdict renders held, even on red CI.
+  it("renders a non-closing disposition as held, but still red when CI failed (#8/#9)", () => {
+    // #9: an owner / automation-bot author is NEVER auto-closed → a gate "close" verdict renders held while CI is green/unknown.
     expect(deriveUnifiedStatus({ ...base, decision: "close" }, { neverClosed: true })).toBe("held");
-    expect(deriveUnifiedStatus({ ...base, decision: "close", readiness: { ciState: "failed" } }, { neverClosed: true })).toBe("held");
+    expect(deriveUnifiedStatus({ ...base, decision: "close", readiness: { ciState: "failed" } }, { neverClosed: true })).toBe("blocked");
     // #8: a guarded-path close is the disposition's HOLD (owner review) unless a red required check forces it.
     expect(deriveUnifiedStatus({ ...base, decision: "close", readiness: { ciState: "passed" } }, { heldForReview: true })).toBe("held");
     expect(deriveUnifiedStatus({ ...base, decision: "close" }, { heldForReview: true })).toBe("held"); // CI not yet reported → held
@@ -125,6 +125,7 @@ describe("renderUnifiedReviewComment", () => {
     expect(md).toContain("🟩");
     expect(md).toContain("Gittensory review result - approve/merge recommended · auto-merged");
     expect(md).toContain("Suggested Action - Approve/Merge");
+    expect(md).toContain("- auto-merged");
     expect(md).toContain("`2 files`");
     expect(md).toContain("`2 AI reviewers`");
     expect(md).toContain("`no blockers`");
@@ -211,6 +212,8 @@ describe("renderUnifiedReviewComment", () => {
       { reviewedAt: "2026-06-29T08:05:59.852Z" },
     );
     expect(md).toContain("<sub>Review updated: 2026-06-29 08:05:59 UTC</sub>");
+    expect(md.indexOf("Gittensory review result")).toBeLessThan(md.indexOf("<sub>Review updated:"));
+    expect(md.indexOf("<sub>Review updated:")).toBeLessThan(md.indexOf("`2 files`"));
     expect(renderUnifiedReviewComment({ ...base, decision: "merge" }, { reviewedAt: "not-a-date" })).not.toContain("Review updated:");
   });
 
@@ -239,13 +242,16 @@ describe("renderUnifiedReviewComment", () => {
   it("a blocked status from reviewer recs (no close decision) reads 'blocked', not 'closed'", () => {
     const md = renderUnifiedReviewComment({ ...base, recommendations: ["close"], blockers: ["Leaks a token."], consensusBlocker: true }, {});
     expect(md).toContain("> [!CAUTION]");
-    expect(md).toContain("Gittensory review result - blockers found"); // headlineLabel(): decision !== "close"
+    expect(md).toContain("Gittensory review result - fixes required"); // headlineLabel(): decision !== "close"
     expect(md).toContain("**🛑 Suggested Action - Fix Blockers**"); // verdictLine(): decision !== "close"
     expect(md).not.toContain("Suggested Action - Reject/Close");
   });
 
   it("renders CI-failing / CI-pending chips and the merge-state label", () => {
     const failing = renderUnifiedReviewComment({ ...base, readiness: { ciState: "failed", mergeStateLabel: "behind" } }, {});
+    expect(failing).toContain("> [!CAUTION]");
+    expect(failing).toContain("Gittensory review result - fixes required");
+    expect(failing).toContain("Suggested Action - Fix Blockers");
     expect(failing).toContain("`CI failing`");
     expect(failing).toContain("`behind`");
     const pending = renderUnifiedReviewComment({ ...base, readiness: { ciState: "unverified" } }, {});
@@ -295,16 +301,41 @@ describe("renderUnifiedReviewComment", () => {
   });
 
   it("appends an explicit verdict reason across ready (merged + unmerged) and advisory states", () => {
-    // The verdict word is bolded (`**…**`); the reason follows outside the bold, so assert each separately.
     const merged = renderUnifiedReviewComment({ ...base, decision: "merge", merged: true, verdictReason: "all checks green" }, {});
-    expect(merged).toContain("Suggested Action - Approve/Merge");
-    expect(merged).toContain("all checks green"); // verdictReason appended, not the default " — all checks passed"
+    expect(merged).toContain("**✅ Suggested Action - Approve/Merge**");
+    expect(merged).toContain("- all checks green");
     const unmerged = renderUnifiedReviewComment({ ...base, decision: "merge", verdictReason: "looks correct" }, {});
     expect(unmerged).not.toContain("auto-merged"); // the unmerged ready variant
-    expect(unmerged).toContain("looks correct");
+    expect(unmerged).toContain("**✅ Suggested Action - Approve/Merge**");
+    expect(unmerged).toContain("- looks correct");
     const advisory = renderUnifiedReviewComment({ ...base, decision: "comment", recommendations: [], verdictReason: "for your awareness" }, {});
-    expect(advisory).toContain("Suggested Action - Advisory Only");
-    expect(advisory).toContain("for your awareness");
+    expect(advisory).toContain("**💡 Suggested Action - Advisory Only**");
+    expect(advisory).toContain("- for your awareness");
+  });
+
+  it("renders suggested-action reasons as bullets below the action line", () => {
+    const md = renderUnifiedReviewComment(
+      {
+        ...base,
+        decision: "manual",
+        recommendations: ["manual_review"],
+        verdictReason: "Touches a guarded path — held for manual review; Touches a maintainer-blocked path — held for manual review",
+      },
+      {},
+    );
+    expect(md).toContain("**⏸️ Suggested Action - Manual Review**");
+    expect(md).toContain("- Touches a guarded path — held for manual review");
+    expect(md).toContain("- Touches a maintainer-blocked path — held for manual review");
+    expect(md).not.toContain("Suggested Action - Manual Review — Touches");
+  });
+
+  it("renders non-closable failed-CI reviews as red manual-review actions, not reject/close", () => {
+    const md = renderUnifiedReviewComment({ ...base, decision: "close", readiness: { ciState: "failed" } }, { neverClosed: true });
+    expect(md).toContain("> [!CAUTION]");
+    expect(md).toContain("Gittensory review result - fixes required");
+    expect(md).toContain("Suggested Action - Manual Review");
+    expect(md).toContain("`CI failing`");
+    expect(md).not.toContain("Suggested Action - Reject/Close");
   });
 
   it("skips empty blocker lines and caps long nit lists at 12", () => {

@@ -86,7 +86,7 @@ Most gate dimensions are tri-state **gate-rule modes**: `off` / `advisory` / `bl
 
 - `off` — the dimension is not evaluated.
 - `advisory` — the finding is **surfaced** (in the comment/context) but never blocks.
-- `block` — the finding can become a hard `Gittensory Gate` blocker. Blocking is always
+- `block` — the finding can become a hard `Gittensory Orb Review Agent` blocker. Blocking is always
   **confirmed-contributor-gated** — the mode chooses *which* deterministic checks are active, never
   *who* can be blocked.
 
@@ -99,7 +99,7 @@ already-enabled gate.
 | Policy pack | `gate.pack` | `gatePack` | `gittensor` / `oss-anti-slop` | `gittensor` | `gittensor` = confirmed-contributor-gated, registry-aware. `oss-anti-slop` runs the deterministic rules against any author on any repo. |
 | Linked-issue gate | `gate.linkedIssue` | `linkedIssueGateMode` | `off`/`advisory`/`block` | `advisory` | If the dashboard "Require linked issue" toggle (`requireLinkedIssue`) is on but this is `off`, it is auto-promoted to `block`. |
 | Duplicate-PR gate | `gate.duplicates` | `duplicatePrGateMode` | `off`/`advisory`/`block` | `block` | Detects duplicate/superseding PRs. |
-| Quality / merge-readiness score signal | `gate.readiness.mode` | `qualityGateMode` | `off`/`advisory`/`block` | `advisory` | Advisory/informational only. `block` is accepted for older configs but does not fail the Gate check. |
+| Quality / merge-readiness score signal | `gate.readiness.mode` | `qualityGateMode` | `off`/`advisory`/`block` | `advisory` | Advisory/informational only. `block` is accepted for older configs but does not fail the review-agent check. |
 | Quality min score | `gate.readiness.minScore` | `qualityGateMinScore` | number 0–100 (nullable) | `null` | Advisory warning threshold for the readiness signal; `null` disables the threshold. |
 | Slop gate | `gate.slop.mode` | `slopGateMode` | `off`/`advisory`/`block` | `off` | Deterministic anti-slop signal. `advisory` surfaces the slop score + warnings; `block` also hard-blocks at/above the min score. Opt-in. |
 | Slop min score | `gate.slop.minScore` | `slopGateMinScore` | number 0–100 (nullable) | `null` (engine uses `60`, the "high" band) | The slop-risk threshold at/above which `slop block` blocks. |
@@ -112,7 +112,7 @@ already-enabled gate.
 | AI review all authors | `gate.aiReview.allAuthors` | `aiReviewAllAuthors` | bool | `false` | When `true`, an enabled AI review runs for every PR author instead of only the engine's default eligible authors. Use this for self-host repos where the selected model must produce the public review summary. |
 | AI review provider | `gate.aiReview.provider` | `aiReviewProvider` | `anthropic` / `openai` / `null` | `null` | `null` = use the stored key's own provider. Must match the stored key's provider or BYOK is skipped (Workers-AI fallback). The key itself is only in the encrypted key store. |
 | AI review model | `gate.aiReview.model` | `aiReviewModel` | string / `null` | `null` | Model override for the BYOK advisory write-up (e.g. `claude-3-5-sonnet-latest`). `null` = the key record's model, else a conservative per-provider default. |
-| AI close confidence | `gate.aiReview.closeConfidence` | `aiReviewCloseConfidence` | number 0–1 (nullable) | `null` (engine uses `0.9`) | Minimum **calibrated** AI-reviewer confidence for a consensus defect / split to **block** under `aiReview.mode: block`. Below-threshold AI defects stay advisory (visible, never close). Each reviewer rates its own confidence; consensus carries the weaker reviewer's. Config-as-code only (no dashboard/DB column). |
+| AI close confidence | `gate.aiReview.closeConfidence` | `aiReviewCloseConfidence` | number 0–1 (nullable) | `null` (engine uses `0.93`) | Minimum **calibrated** AI-reviewer confidence for a consensus defect / split to **block** under `aiReview.mode: block`. Below-threshold AI defects stay advisory (visible, never close). Each reviewer rates its own confidence; consensus carries the weaker reviewer's. Config-as-code only (no dashboard/DB column). |
 
 ### Guardrails and scope (focus manifest)
 

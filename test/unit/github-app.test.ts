@@ -716,7 +716,7 @@ describe("GitHub check runs", () => {
     expect(isCrossAppCheckRunError(null)).toBe(false); // non-object
   });
 
-  it("creates a failing opt-in Gittensory Gate check for merge blockers", async () => {
+  it("creates a failing opt-in Gittensory Orb Review Agent check for merge blockers", async () => {
     const privateKey = await generatePrivateKeyPem();
     let capturedBody: {
       name?: string;
@@ -773,9 +773,9 @@ describe("GitHub check runs", () => {
 
     expect(result).toMatchObject({ kind: "published", id: 88 });
     expect(capturedBody).toMatchObject({
-      name: "Gittensory Gate",
+      name: "Gittensory Orb Review Agent",
       conclusion: "failure",
-      output: { title: "Gittensory Gate: No linked issue detected" },
+      output: { title: "Gittensory Orb Review Agent: No linked issue detected" },
     });
     expect(capturedBody.output?.text).toContain("Link the issue before merge.");
     expect(capturedBody.output?.text).not.toMatch(
@@ -817,9 +817,9 @@ describe("GitHub check runs", () => {
 
     expect(result).toMatchObject({ kind: "published", id: 89 });
     expect(capturedBody).toMatchObject({
-      name: "Gittensory Gate",
+      name: "Gittensory Orb Review Agent",
       status: "in_progress",
-      output: { title: "Gittensory Gate is evaluating" },
+      output: { title: "Gittensory Orb Review Agent is evaluating" },
     });
     expect(capturedBody).not.toHaveProperty("conclusion");
     // The Gate blocks every author the same on a configured blocker (confirmed status no longer gates the verdict).
@@ -900,10 +900,10 @@ describe("GitHub check runs", () => {
       calls.some((call) => call.includes("/commits/final123/check-runs")),
     ).toBe(false);
     expect(capturedBody).toMatchObject({
-      name: "Gittensory Gate",
+      name: "Gittensory Orb Review Agent",
       status: "completed",
       conclusion: "success",
-      output: { title: "Gittensory Gate passed" },
+      output: { title: "Gittensory Orb Review Agent passed" },
     });
   });
 
@@ -973,7 +973,7 @@ describe("GitHub check runs", () => {
         if (url.includes("/commits/pending-existing/check-runs")) {
           return Response.json({
             total_count: 1,
-            check_runs: [{ id: 333, name: "Gittensory Gate", status: "in_progress" }],
+            check_runs: [{ id: 333, name: "Gittensory Orb Review Agent", status: "in_progress" }],
           });
         }
         if (url.includes("/check-runs/333")) {
@@ -1021,7 +1021,7 @@ describe("GitHub check runs", () => {
             check_runs: [
               {
                 id: 444,
-                name: "Gittensory Gate",
+                name: "Gittensory Orb Review Agent",
                 status: "completed",
                 conclusion: "failure",
               },
@@ -1056,7 +1056,7 @@ describe("GitHub check runs", () => {
     expect(calls.some((call) => call.includes("/check-runs/444"))).toBe(false);
     expect(capturedBody).toMatchObject({
       status: "in_progress",
-      output: { title: "Gittensory Gate is evaluating" },
+      output: { title: "Gittensory Orb Review Agent is evaluating" },
     });
     expect(capturedBody).not.toHaveProperty("conclusion");
   });
@@ -1100,7 +1100,7 @@ describe("GitHub check runs", () => {
       status: "completed",
       conclusion: "skipped",
       output: {
-        title: "Gittensory Gate skipped",
+        title: "Gittensory Orb Review Agent skipped",
         summary: "Merged before Gittensory finished.",
       },
     });
@@ -1133,9 +1133,9 @@ describe("GitHub check runs", () => {
             output?: { annotations?: Array<{ path: string; title: string }> };
           };
           if (body.name === "Gittensory Context") contextBody = body;
-          if (body.name === "Gittensory Gate") gateBody = body;
+          if (body.name === "Gittensory Orb Review Agent") gateBody = body;
           return Response.json(
-            { id: body.name === "Gittensory Gate" ? 90 : 77 },
+            { id: body.name === "Gittensory Orb Review Agent" ? 90 : 77 },
             { status: 201 },
           );
         }

@@ -810,11 +810,11 @@ describe("signal coverage edge cases", () => {
     // The comment builder must agree by construction: ON winner is NOT a blocking-merge panel; ON loser is.
     const winnerComment = buildPublicPrIntelligenceComment({ ...baseFor(winnerPr), duplicateWinnerEnabled: true });
     const loserComment = buildPublicPrIntelligenceComment({ ...baseFor(loserPr), duplicateWinnerEnabled: true });
-    expect(winnerComment).not.toContain("Gittensory Gate is blocking merge");
-    expect(loserComment).toContain("Gittensory Gate is blocking merge");
+    expect(winnerComment).not.toContain("Gittensory Orb Review Agent is blocking merge");
+    expect(loserComment).toContain("Gittensory Orb Review Agent is blocking merge");
     // Flag OFF on the winner is byte-identical to a blocking panel (today's behavior).
     const offWinnerComment = buildPublicPrIntelligenceComment(baseFor(winnerPr));
-    expect(offWinnerComment).toContain("Gittensory Gate is blocking merge");
+    expect(offWinnerComment).toContain("Gittensory Orb Review Agent is blocking merge");
   });
 
   it("renders opt-in gate panel states for collision and repo evaluation blockers", () => {
