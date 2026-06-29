@@ -143,9 +143,19 @@ test("scanCommitSignature fails safe without a token or head SHA", async () => {
   assert.deepEqual(await scanCommitSignature(req({ headSha: undefined }), throwingFetch), []);
 });
 
-test("scanCommitSignature fails safe on a malformed repo slug", async () => {
-  assert.deepEqual(await scanCommitSignature(req({ repoFullName: "not-a-slug" }), throwingFetch), []);
-  assert.deepEqual(await scanCommitSignature(req({ repoFullName: "o/r/extra" }), throwingFetch), []);
+test("scanCommitSignature fails closed on a malformed repo slug WITHOUT any network call", async () => {
+  // A spy that records invocation: a malformed slug must be rejected BEFORE any GitHub request, so the guard
+  // can never query the wrong repository. (A throwing fetch would be swallowed by the analyzer's fail-safe
+  // try/catch and could mask a slug that slipped through, so assert the call never happens instead.)
+  for (const repoFullName of ["not-a-slug", "o/r/extra", "/r", "o/", "a/b/c/d"]) {
+    let called = false;
+    const spyFetch: typeof fetch = async () => {
+      called = true;
+      return jsonResponse({});
+    };
+    assert.deepEqual(await scanCommitSignature(req({ repoFullName }), spyFetch), [], `${repoFullName} must yield no finding`);
+    assert.equal(called, false, `${repoFullName} must not trigger any GitHub request`);
+  }
 });
 
 test("scanCommitSignature fails safe when the head fetch throws or returns no commit", async () => {

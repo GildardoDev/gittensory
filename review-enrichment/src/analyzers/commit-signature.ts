@@ -100,10 +100,13 @@ export async function scanCommitSignature(
   const { repoFullName, githubToken, headSha } = req;
   if (!githubToken || !headSha) return [];
 
+  // Require EXACTLY `owner/repo`. A 3+ segment value like `o/r/extra` would otherwise keep parts[0]/parts[1]
+  // and silently query the wrong repository (`o/r`) instead of failing safe, so reject anything that is not a
+  // clean two-segment slug before building any GitHub URL.
   const parts = repoFullName.split("/");
   const owner = parts[0];
   const repo = parts[1];
-  if (!owner || !repo || !SLUG_RE.test(owner) || !SLUG_RE.test(repo)) return [];
+  if (parts.length !== 2 || !owner || !repo || !SLUG_RE.test(owner) || !SLUG_RE.test(repo)) return [];
 
   const headers = githubHeaders(githubToken);
   const head = await fetchHeadCommit(
