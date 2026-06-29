@@ -165,7 +165,7 @@ export function createSqliteQueue(
           [payload, runAfter, now, priority, existing.id],
         );
         recordQueueMetric(driver, "gittensory_jobs_coalesced_total");
-        void pump();
+        kickOne();
         return;
       }
     }
@@ -174,7 +174,7 @@ export function createSqliteQueue(
       [payload, runAfter, now, priority, key],
     );
     recordQueueMetric(driver, "gittensory_jobs_enqueued_total");
-    void pump();
+    kickOne();
   }
 
   function claimNext(): JobRow | null {
@@ -378,6 +378,14 @@ export function createSqliteQueue(
     }
   }
 
+  function kickOne(): void {
+    void pump();
+  }
+
+  function kickAll(): void {
+    while (active < concurrency) void pump();
+  }
+
   const binding = {
     async send(
       message: JobMessage,
@@ -400,9 +408,8 @@ export function createSqliteQueue(
       const tick = (): void => {
         /* v8 ignore next */ // stop() clears the timer, so a tick never fires with running=false
         if (!running) return;
-        void pump().finally(() => {
-          if (running) timer = setTimeout(tick, pollIntervalMs);
-        });
+        kickAll();
+        timer = setTimeout(tick, pollIntervalMs);
       };
       tick();
     },

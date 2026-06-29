@@ -342,6 +342,39 @@ describe("createPgQueue (durable #977)", () => {
     expect(seen).toEqual(["ticked"]);
   });
 
+  it("start() fills available workers for an existing due backlog", async () => {
+    const m = makePool();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    const q = createPgQueue(
+      m.pool,
+      async () => {
+        concurrent++;
+        maxConcurrent = Math.max(maxConcurrent, concurrent);
+        await gate;
+        concurrent--;
+      },
+      { concurrency: 3, pollIntervalMs: 100_000 },
+    );
+    await q.init();
+    m.enqueueJob("1", { type: "a" });
+    m.enqueueJob("2", { type: "b" });
+    m.enqueueJob("3", { type: "c" });
+    try {
+      q.start();
+      for (let i = 0; i < 20 && maxConcurrent < 3; i += 1)
+        await new Promise((r) => setTimeout(r, 10));
+      expect(maxConcurrent).toBe(3);
+    } finally {
+      release();
+      await q.stop();
+    }
+  });
+
   it("start() is idempotent", async () => {
     const { pool } = makePool();
     const q = createPgQueue(pool, async () => undefined, { pollIntervalMs: 100_000 });

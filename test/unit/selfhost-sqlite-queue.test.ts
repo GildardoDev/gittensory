@@ -462,6 +462,42 @@ describe("createSqliteQueue (durable #980)", () => {
     expect(seen).toEqual(["ticked"]);
   });
 
+  it("start() fills available workers for an existing due backlog", async () => {
+    const driver = makeDriver();
+    createSqliteQueue(driver, async () => undefined); // creates the table
+    for (const name of ["a", "b", "c"]) {
+      driver.query(
+        "INSERT INTO _selfhost_jobs (payload, status, attempts, run_after, created_at) VALUES (?, 'pending', 0, 0, 0)",
+        [JSON.stringify(msg(name))],
+      );
+    }
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    const q = createSqliteQueue(
+      driver,
+      async () => {
+        concurrent++;
+        maxConcurrent = Math.max(maxConcurrent, concurrent);
+        await gate;
+        concurrent--;
+      },
+      { concurrency: 3, pollIntervalMs: 100_000 },
+    );
+    try {
+      q.start();
+      for (let i = 0; i < 20 && maxConcurrent < 3; i += 1)
+        await new Promise((r) => setTimeout(r, 10));
+      expect(maxConcurrent).toBe(3);
+    } finally {
+      release();
+      await q.stop();
+    }
+  });
+
   it("recovers a job left 'processing' by a crash", async () => {
     const oldRecoveryJitter = process.env.QUEUE_RECOVERY_JITTER_MS;
     process.env.QUEUE_RECOVERY_JITTER_MS = "0";

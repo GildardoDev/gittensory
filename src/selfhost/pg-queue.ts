@@ -224,7 +224,7 @@ export function createPgQueue(
           [payload, runAfter, now, priority, existing.id],
         );
         await recordQueueMetric("gittensory_jobs_coalesced_total");
-        void pump();
+        kickOne();
         return;
       }
     }
@@ -233,7 +233,7 @@ export function createPgQueue(
       [payload, runAfter, now, priority, key],
     );
     await recordQueueMetric("gittensory_jobs_enqueued_total");
-    void pump();
+    kickOne();
   }
 
   async function claimNext(): Promise<JobRow | null> {
@@ -426,6 +426,14 @@ export function createPgQueue(
     }
   }
 
+  function kickOne(): void {
+    void pump();
+  }
+
+  function kickAll(): void {
+    while (active < concurrency) void pump();
+  }
+
   const binding = {
     async send(
       message: JobMessage,
@@ -449,9 +457,8 @@ export function createPgQueue(
       const tick = (): void => {
         /* v8 ignore next */ // stop() clears the timer before the next tick can fire with running=false
         if (!running) return;
-        void pump().finally(() => {
-          if (running) timer = setTimeout(tick, pollIntervalMs);
-        });
+        kickAll();
+        timer = setTimeout(tick, pollIntervalMs);
       };
       tick();
     },
