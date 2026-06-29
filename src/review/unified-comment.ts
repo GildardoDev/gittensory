@@ -250,21 +250,19 @@ export function deriveUnifiedStatus(input: UnifiedReviewInput, ctx: UnifiedComme
     else if ((input.failedCount ?? 0) > 0 || recs.some((r) => r !== "merge")) status = "held";
     else status = "ready";
   }
-  // CI gate — a PR is "safe to merge" ONLY when CI is GREEN. Apply this only to otherwise-ready statuses so
-  // pending/unverified CI cannot mask an authoritative close/block decision from the gate.
+  // Readiness is advisory for the Gittensory verdict. A PR is not "safe to merge" until CI is green, but
+  // CI/merge-state evidence must not create a red/blocked Gittensory decision by itself; the blocker has to
+  // come from the review disposition (`close`) or consensus review findings.
   if (status === "ready" && input.readiness && input.readiness.ciState !== "passed") {
-    return input.readiness.ciState === "failed" ? "blocked" : "held";
+    return "held";
   }
-  // Merge-state gate — "safe to merge" also requires the PR to be MERGEABLE. A `dirty` (base conflict) PR
-  // cannot merge as-is → BLOCKED; a `behind` PR needs a rebase first → HELD. This stops the green "safe to
-  // merge" / "Approved" headline from contradicting a `dirty`/`behind` merge-state chip (the #4220 report,
-  // where the headline said "safe to merge" while the chip read `dirty`). Other states — clean, a not-yet-
-  // computed `unknown`, or a `blocked` that the bot's own pending approval will clear — do not downgrade.
+  // Merge-state readiness follows the same rule: do not claim "safe to merge" while GitHub says the branch is
+  // dirty/behind, but keep the comment in a held/advisory tone instead of turning readiness into a blocker.
+  // Other states — clean, a not-yet-computed `unknown`, or a `blocked` that the bot's own pending approval will clear — do not downgrade.
   // (#ready-needs-mergeable)
   if (status === "ready" && input.readiness?.mergeStateLabel) {
     const mergeState = input.readiness.mergeStateLabel.toLowerCase();
-    if (mergeState === "dirty") return "blocked";
-    if (mergeState === "behind") return "held";
+    if (mergeState === "dirty" || mergeState === "behind") return "held";
   }
   // Guarded-hold gate — a clean + green PR whose diff touches a hard-guardrail path (CI config, the review
   // engine, visuals) is HELD for owner review by the disposition, never auto-merged. The comment must then say

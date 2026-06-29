@@ -38,10 +38,10 @@ describe("deriveUnifiedStatus", () => {
     expect(deriveUnifiedStatus({ ...base, recommendations: ["request_changes"] })).toBe("held");
   });
 
-  it("CI that hasn't passed is NEVER safe-to-merge — failed→blocked, pending/unverified→held, even over a merge verdict", () => {
-    // A red CI must never render "safe to merge". It downgrades even an explicit `merge` verdict to blocked.
-    expect(deriveUnifiedStatus({ ...base, readiness: { ciState: "failed" } })).toBe("blocked");
-    expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "failed" } })).toBe("blocked");
+  it("CI readiness is advisory for Gittensory — failed/pending holds, but never blocks a merge verdict", () => {
+    // Red CI must never render "safe to merge", but CI itself is not a Gittensory blocker.
+    expect(deriveUnifiedStatus({ ...base, readiness: { ciState: "failed" } })).toBe("held");
+    expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "failed" } })).toBe("held");
     // CI still running / not yet reported (chip "CI pending") → HELD, never "safe to merge".
     expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "unverified" } })).toBe("held");
     // ONLY green CI + a merge verdict renders ready.
@@ -54,10 +54,10 @@ describe("deriveUnifiedStatus", () => {
     expect(deriveUnifiedStatus({ ...base, recommendations: [], blockers: ["leaks a secret"] })).toBe("blocked");
   });
 
-  it("a non-mergeable merge state is NEVER safe-to-merge — dirty(conflict)→blocked, behind→held, even over a merge verdict (#4220)", () => {
+  it("a non-mergeable merge state is advisory — dirty/behind hold, but never block a merge verdict (#4220)", () => {
     // The reported bug: green CI + merge verdict but a `dirty` base conflict rendered "safe to merge".
-    expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "passed", mergeStateLabel: "dirty" } })).toBe("blocked");
-    expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "passed", mergeStateLabel: "DIRTY" } })).toBe("blocked"); // case-insensitive
+    expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "passed", mergeStateLabel: "dirty" } })).toBe("held");
+    expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "passed", mergeStateLabel: "DIRTY" } })).toBe("held"); // case-insensitive
     expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "passed", mergeStateLabel: "behind" } })).toBe("held");
     // A clean (or not-yet-computed / pending-bot-approval) merge state still renders ready.
     expect(deriveUnifiedStatus({ ...base, decision: "merge", readiness: { ciState: "passed", mergeStateLabel: "clean" } })).toBe("ready");
