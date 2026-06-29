@@ -58,7 +58,12 @@ export type EnqueueWebhookResult = "queued" | "duplicate" | "ignored" | "invalid
 
 /** Env-based core of the webhook enqueue (parse → dedup → record → WEBHOOKS lane), with NO Hono Context. Shared by
  *  the request-context receiver above AND the pull-mode relay drain loop (server.ts), which has no Context. Returns
- *  a status the caller maps to a response / an ack decision. */
+ *  a status the caller maps to a response / an ack decision.
+ *
+ *  This is the retired direct review-app receiver, not the central Orb ingress. The Orb App still receives GitHub
+ *  webhooks at /v1/orb/webhook and forwards/pends them for registered self-host engines. Direct review execution
+ *  now requires the self-host runtime cache so stale Cloudflare review-webhook traffic fails loudly instead of being
+ *  accepted into a Worker path that no longer performs reviews. */
 export async function enqueueWebhookByEnv(env: Env, deliveryId: string, eventName: string, rawBody: string): Promise<EnqueueWebhookResult> {
   if (!isSelfHostedReviewRuntime(env)) return "review_unavailable";
 

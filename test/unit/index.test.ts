@@ -83,7 +83,7 @@ describe("worker entrypoint", () => {
     expect(sent).toEqual([]);
   });
 
-  it("acks and ignores review-execution jobs from a broker-only Cloudflare runtime", async () => {
+  it("acks and ignores stale review-execution jobs from a broker-only Cloudflare runtime", async () => {
     const env = createTestEnv();
     delete env.SELFHOST_TRANSIENT_CACHE;
     const warned = vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -105,7 +105,7 @@ describe("worker entrypoint", () => {
     expect(acked).toEqual(["hosted-review-job"]);
     expect(retried).toEqual([]);
     expect(JSON.parse(String(warned.mock.calls[0]?.[0]))).toMatchObject({
-      event: "hosted_review_job_ignored",
+      event: "retired_review_job_ignored",
       jobType: "github-webhook",
     });
   });

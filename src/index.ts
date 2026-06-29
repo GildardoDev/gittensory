@@ -26,10 +26,13 @@ export default {
     for (const message of batch.messages) {
       try {
         if (!isSelfHostedReviewRuntime(env) && isReviewExecutionJob(message.body)) {
+          // Hosted review execution is retired. The Cloudflare API worker still handles Orb ingress
+          // (/v1/orb/webhook) and token brokerage, but only self-host runtimes may execute review jobs.
+          // Ack stale Cloudflare review-queue messages so they do not churn into the DLQ after cutover.
           console.warn(
             JSON.stringify({
               level: "warn",
-              event: "hosted_review_job_ignored",
+              event: "retired_review_job_ignored",
               messageId: message.id,
               jobType: message.body.type,
             }),

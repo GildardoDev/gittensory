@@ -118,7 +118,7 @@ describe("github webhook dedup (#789)", () => {
 });
 
 describe("github webhook queue isolation (#audit-webhook-queue)", () => {
-  it("rejects valid review webhooks when the self-host review runtime is absent", async () => {
+  it("rejects retired direct review-app webhooks when the self-host review runtime is absent", async () => {
     const env = createTestEnv();
     delete env.SELFHOST_TRANSIENT_CACHE;
     let webhookSends = 0;
