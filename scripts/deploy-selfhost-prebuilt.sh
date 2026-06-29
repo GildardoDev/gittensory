@@ -163,7 +163,8 @@ run_compose_deploy() {
   local -a compose_args
 
   override_file="$(mktemp)"
-  trap 'rm -f "$override_file"' EXIT
+  SELFHOST_GENERATED_COMPOSE_FILE="$override_file"
+  trap 'rm -f "${SELFHOST_GENERATED_COMPOSE_FILE:-}"' EXIT
 
   cat >"$override_file" <<YAML
 services:
