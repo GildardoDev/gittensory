@@ -2,6 +2,7 @@ import { scanActionPins } from "./actions-pin.js";
 import { scanAssetWeight } from "./asset-weight.js";
 import { scanCodeowners } from "./codeowners.js";
 import { scanCommitSignature } from "./commit-signature.js";
+import { scanDepMaintenanceHealth } from "./dep-maintenance-health.js";
 import { dependencyAnalyzer } from "./dependency/descriptor.js";
 import { scanDocCommentDrift } from "./doc-comment-drift.js";
 import { scanEol } from "./eol-check.js";
@@ -334,6 +335,25 @@ export const ANALYZER_DESCRIPTORS = [
     },
     run: (req, { signal, analysis, diagnostics }) =>
       scanNativeBuild(req, fetch, { signal, analysis, diagnostics }),
+  }),
+  descriptor({
+    name: "depMaintenanceHealth",
+    title: "Dependency maintenance health",
+    category: "supply-chain",
+    cost: "registry",
+    defaultEnabled: true,
+    requires: ["files", "public-network"],
+    limits: { maxQueries: 25, maxRegistryJsonBytes: 2 * 1024 * 1024 },
+    docs: {
+      summary:
+        "Flags newly-added or upgraded dependencies that are deprecated/yanked by their maintainer or stale (no recent release).",
+      looksAt: "New/upgraded npm and PyPI dependency versions.",
+      reports: "Package, version, ecosystem, the maintenance signal (deprecated/yanked/stale), and a public-safe reason.",
+      network: "Calls the npm and PyPI registries. No GitHub token required.",
+      notes:
+        "Registry JSON is capped so large package metadata cannot monopolize REES memory; PyPI versions are matched to releases by PEP 440 equality.",
+    },
+    run: (req, { signal }) => scanDepMaintenanceHealth(req, fetch, { signal }),
   }),
   descriptor({
     name: "history",

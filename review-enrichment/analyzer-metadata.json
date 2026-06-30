@@ -525,6 +525,33 @@
       }
     },
     {
+      "name": "depMaintenanceHealth",
+      "title": "Dependency maintenance health",
+      "category": "supply-chain",
+      "cost": "registry",
+      "defaultEnabled": true,
+      "profiles": [
+        "fast",
+        "balanced",
+        "deep"
+      ],
+      "requires": [
+        "files",
+        "public-network"
+      ],
+      "limits": {
+        "maxQueries": 25,
+        "maxRegistryJsonBytes": 2097152
+      },
+      "docs": {
+        "summary": "Flags newly-added or upgraded dependencies that are deprecated/yanked by their maintainer or stale (no recent release).",
+        "looksAt": "New/upgraded npm and PyPI dependency versions.",
+        "reports": "Package, version, ecosystem, the maintenance signal (deprecated/yanked/stale), and a public-safe reason.",
+        "network": "Calls the npm and PyPI registries. No GitHub token required.",
+        "notes": "Registry JSON is capped so large package metadata cannot monopolize REES memory; PyPI versions are matched to releases by PEP 440 equality."
+      }
+    },
+    {
       "name": "history",
       "title": "Author and change-area history",
       "category": "history",
