@@ -19,6 +19,7 @@ import { scanRedos } from "./redos.js";
 import { secretAnalyzer } from "./secret/descriptor.js";
 import { scanSecretLog } from "./secret-log.js";
 import { scanTyposquat } from "./typosquat.js";
+import { scanUnsafeExec } from "./unsafe-exec.js";
 import type {
   AnalyzerDescriptor,
   AnalyzerFn,
@@ -439,6 +440,26 @@ export const ANALYZER_DESCRIPTORS = [
     },
     run: (req, { signal, analysis, diagnostics }) =>
       scanChurnHotspot(req, fetch, { signal, analysis, diagnostics }),
+  }),
+  descriptor({
+    name: "unsafeExec",
+    title: "Unsafe dynamic execution",
+    category: "security",
+    cost: "local",
+    defaultEnabled: true,
+    requires: ["files"],
+    limits: { maxFindings: 25, maxLineChars: 2000 },
+    docs: {
+      summary:
+        "Flags added code that builds a command or code string by interpolation/concatenation and passes it to a dangerous execution sink.",
+      looksAt:
+        "Added lines calling exec/execSync/spawn/execFile with a dynamically-built command, or eval/Function with a dynamically-built code argument (Function's code is its last argument).",
+      reports: "File, line, the sink name, and the kind (command-exec or code-eval) — never the argument text.",
+      network: "Pure local analyzer. No external network call.",
+      notes:
+        "Conservative + line-local by design: pure string literals, literal-command spawns, and bare identifiers are not flagged; it does not descend into template-literal ${...} interpolations and treats only known child_process member aliases as shell sinks, trading some recall for near-zero false positives.",
+    },
+    run: (req) => scanUnsafeExec(req),
   }),
 ] as const satisfies readonly AnyAnalyzerDescriptor[];
 

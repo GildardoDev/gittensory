@@ -379,6 +379,18 @@ export function renderBrief(
     }
   }
 
+  const unsafeExec = findings.unsafeExec ?? [];
+  if (unsafeExec.length) {
+    lines.push(
+      "### Unsafe dynamic execution (command/code injection risk — pass arguments safely, not as an interpolated string)",
+    );
+    for (const item of unsafeExec) {
+      lines.push(
+        `- ${safeCodeSpan(`${item.file}:${item.line}`)} — ${safeCodeSpan(item.sink)} builds a ${item.kind === "command-exec" ? "shell command" : "code"} string by interpolation/concatenation`,
+      );
+    }
+  }
+
   if (!lines.length) return { promptSection: "", systemSuffix: "" };
 
   const header =

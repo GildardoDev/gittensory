@@ -285,6 +285,16 @@ export interface ChurnHotspotFinding {
   capped: boolean;
 }
 
+/** An added line that builds a command or code string by interpolation/concatenation and passes it to a dangerous
+ *  execution sink (command-injection / code-injection risk). Reports the location + the sink name + the kind only
+ *  — NEVER the argument text/value, so it is public-safe. */
+export interface UnsafeExecFinding {
+  file: string;
+  line: number;
+  sink: string;
+  kind: "command-exec" | "code-eval";
+}
+
 /** Structured analyzer output. Each analyzer fills its own key; more land as analyzers ship (#1477/#1478). */
 export interface BriefFindings {
   dependency?: DependencyFinding[];
@@ -308,6 +318,7 @@ export interface BriefFindings {
   docCommentDrift?: DocCommentDriftFinding[];
   duplication?: DuplicationFinding[];
   churnHotspot?: ChurnHotspotFinding[];
+  unsafeExec?: UnsafeExecFinding[];
 }
 
 /** A JSDoc/TSDoc block whose `@param` tags name parameters the adjacent function no longer declares — a
