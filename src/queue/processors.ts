@@ -337,6 +337,7 @@ import {
   buildFocusManifestGuidance,
   composeRepoReviewContext,
   excludeReviewPaths,
+  resolveRepoEnrichmentToggles,
   resolveReviewPathInstructions,
   resolveReviewPreMergeChecks,
   resolveReviewPromptOverrides,
@@ -5806,6 +5807,13 @@ export async function runAiReviewForAdvisory(
                   args.repoFullName,
                 )
               : undefined,
+            // The AI-review path loads the focus manifest later (inside runGittensoryAiReview), not before this
+            // enrichment call, so there is no already-resolved manifest to pass here; loadRepoFocusManifest is
+            // cached per repo, so this is a cache hit rather than an extra fetch. resolveRepoEnrichmentToggles is
+            // exactly the load-and-swallow caller (a load error ⇒ no toggles ⇒ default analyzer set).
+            enrichmentAnalyzers: await resolveRepoEnrichmentToggles(() =>
+              loadRepoFocusManifest(env, args.repoFullName),
+            ),
             files,
             diff: enrichmentDiff,
           })

@@ -7,6 +7,7 @@ import { normalizeAutoCloseExemptLogins } from "../settings/auto-close-exempt";
 import { DEFAULT_TYPE_LABELS, normalizeTypeLabelSet } from "../settings/pr-type-label";
 import { DEFAULT_LINKED_ISSUE_LABEL_PROPAGATION, normalizeLinkedIssueLabelPropagationConfig, VALID_LINKED_ISSUE_LABEL_PROPAGATION_MODES } from "../review/linked-issue-label-propagation";
 import { normalizeModerationLabel, normalizeModerationRules } from "../settings/moderation-rules";
+import { REES_ANALYZER_NAME_SET, type ReesAnalyzerName } from "../review/enrichment-analyzer-names";
 import { hasUnsafeWildcardCount } from "./change-guardrail";
 import { PUBLIC_LOCAL_PATH_INLINE } from "./redaction";
 
@@ -241,6 +242,10 @@ export type FocusManifestReviewConfig = {
   footerText: string | null;
   note: string | null;
   fields: Partial<Record<ReviewFieldKey, boolean>>;
+  /** `review.enrichment`: per-repo REES enrichment-analyzer toggles (analyzer name → on/off). Only known analyzer
+   *  keys are kept (unknown keys warn + drop at parse). Empty (default, absent) ⇒ the operator's default analyzer
+   *  set runs unchanged (byte-identical). (#2050) */
+  enrichmentAnalyzers: Partial<Record<ReesAnalyzerName, boolean>>;
   /** `review.profile`: chill / balanced / assertive. null (absent) = balanced = byte-identical reviewer prompt. */
   profile: ReviewProfile | null;
   /** `review.security_focus`: when true, the AI reviewer is told to prioritize a security-defect category
@@ -423,7 +428,7 @@ const EMPTY_MANIFEST: FocusManifest = {
   publicNotes: [],
   gate: { ...EMPTY_GATE_CONFIG },
   settings: {},
-  review: { present: false, footerText: null, note: null, fields: {}, profile: null, securityFocus: null, inlineComments: null, pathInstructions: [], instructions: null, excludePaths: [], preMergeChecks: [] },
+  review: { present: false, footerText: null, note: null, fields: {}, enrichmentAnalyzers: {}, profile: null, securityFocus: null, inlineComments: null, pathInstructions: [], instructions: null, excludePaths: [], preMergeChecks: [] },
   features: { ...EMPTY_FEATURES_CONFIG },
   contentLane: { ...EMPTY_CONTENT_LANE_CONFIG },
   warnings: [],
@@ -452,7 +457,7 @@ function emptyManifest(source: FocusManifestSource, warnings: string[] = []): Fo
     warnings,
     gate: { ...EMPTY_GATE_CONFIG },
     settings: {},
-    review: { present: false, footerText: null, note: null, fields: {}, profile: null, securityFocus: null, inlineComments: null, pathInstructions: [], instructions: null, excludePaths: [], preMergeChecks: [] },
+    review: { present: false, footerText: null, note: null, fields: {}, enrichmentAnalyzers: {}, profile: null, securityFocus: null, inlineComments: null, pathInstructions: [], instructions: null, excludePaths: [], preMergeChecks: [] },
     features: { ...EMPTY_FEATURES_CONFIG },
     contentLane: { ...EMPTY_CONTENT_LANE_CONFIG },
   };
@@ -1207,7 +1212,7 @@ function parsePublicSafeText(value: JsonValue | undefined, field: string, warnin
  * throws; invalid/unsafe values are dropped with warnings.
  */
 function parseReviewConfig(value: JsonValue | undefined, warnings: string[]): FocusManifestReviewConfig {
-  const empty: FocusManifestReviewConfig = { present: false, footerText: null, note: null, fields: {}, profile: null, securityFocus: null, inlineComments: null, pathInstructions: [], instructions: null, excludePaths: [], preMergeChecks: [] };
+  const empty: FocusManifestReviewConfig = { present: false, footerText: null, note: null, fields: {}, enrichmentAnalyzers: {}, profile: null, securityFocus: null, inlineComments: null, pathInstructions: [], instructions: null, excludePaths: [], preMergeChecks: [] };
   if (value === undefined || value === null) return empty;
   if (typeof value !== "object" || Array.isArray(value)) {
     warnings.push(`Manifest field "review" must be a mapping; ignoring it.`);
@@ -1223,6 +1228,19 @@ function parseReviewConfig(value: JsonValue | undefined, warnings: string[]): Fo
     for (const key of REVIEW_FIELD_KEYS) {
       const flag = normalizeOptionalBoolean(fieldsRecord[key], `review.fields.${key}`, warnings);
       if (flag !== null) fields[key] = flag;
+    }
+  }
+  const enrichmentRecord = r.enrichment !== null && typeof r.enrichment === "object" && !Array.isArray(r.enrichment) ? (r.enrichment as Record<string, JsonValue>) : undefined;
+  if (r.enrichment !== undefined && r.enrichment !== null && enrichmentRecord === undefined) warnings.push(`Manifest "review.enrichment" must be a mapping; ignoring it.`);
+  const enrichmentAnalyzers: Partial<Record<ReesAnalyzerName, boolean>> = {};
+  if (enrichmentRecord) {
+    for (const key of Object.keys(enrichmentRecord)) {
+      if (!REES_ANALYZER_NAME_SET.has(key)) {
+        warnings.push(`Manifest "review.enrichment" has unknown analyzer "${key}"; ignoring it.`);
+        continue;
+      }
+      const flag = normalizeOptionalBoolean(enrichmentRecord[key], `review.enrichment.${key}`, warnings);
+      if (flag !== null) enrichmentAnalyzers[key as ReesAnalyzerName] = flag;
     }
   }
   const footerText = footerRecord ? parsePublicSafeText(footerRecord.text, "review.footer.text", warnings) : null;
@@ -1245,10 +1263,12 @@ function parseReviewConfig(value: JsonValue | undefined, warnings: string[]): Fo
       instructions !== null ||
       excludePaths.length > 0 ||
       preMergeChecks.length > 0 ||
-      Object.keys(fields).length > 0,
+      Object.keys(fields).length > 0 ||
+      Object.keys(enrichmentAnalyzers).length > 0,
     footerText,
     note,
     fields,
+    enrichmentAnalyzers,
     profile,
     securityFocus,
     inlineComments,
@@ -1414,6 +1434,7 @@ export function reviewConfigToJson(review: FocusManifestReviewConfig): JsonValue
     });
   }
   if (Object.keys(review.fields).length > 0) out.fields = { ...review.fields } as Record<string, JsonValue>;
+  if (Object.keys(review.enrichmentAnalyzers).length > 0) out.enrichment = { ...review.enrichmentAnalyzers } as Record<string, JsonValue>;
   return out;
 }
 
@@ -1448,6 +1469,22 @@ export function resolveReviewPromptOverrides(manifest: FocusManifest | null): { 
  *  than inline in the processor. (#review-pre-merge-checks) */
 export function resolveReviewPreMergeChecks(manifest: FocusManifest | null): PreMergeCheck[] {
   return manifest?.review.preMergeChecks ?? [];
+}
+
+/** Resolve `review.enrichment` analyzer toggles from a possibly-null manifest (null = load failure ⇒ no toggles ⇒
+ *  the operator's default analyzer set runs unchanged). Centralized so the enrichment caller threads them in one
+ *  place with the null-manifest branch covered here (unit-tested) rather than inline in the processor. (#2050) */
+export function resolveEnrichmentAnalyzerToggles(manifest: FocusManifest | null): Partial<Record<ReesAnalyzerName, boolean>> {
+  return manifest?.review.enrichmentAnalyzers ?? {};
+}
+
+/** Load a repo's `review.enrichment` toggles fail-safely: a manifest load error is swallowed to `null`, so a broken
+ *  or unreachable manifest degrades to no toggles ⇒ the operator's default analyzer set runs. The loader is injected
+ *  so both the success and the load-failure path are unit-tested here rather than inline at the enrichment call
+ *  site. (#2050) */
+export async function resolveRepoEnrichmentToggles(loadManifest: () => Promise<FocusManifest>): Promise<Partial<Record<ReesAnalyzerName, boolean>>> {
+  const manifest = await loadManifest().catch(() => null);
+  return resolveEnrichmentAnalyzerToggles(manifest);
 }
 
 /** One per-repo review SKILL (#review-skills): a maintainer-maintained rubric module loaded from the container-private
