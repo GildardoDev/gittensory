@@ -5146,6 +5146,10 @@ export async function runAiReviewForAdvisory(
     // manifest. Threaded in (not loaded here) so the AI review path makes no extra manifest fetch — absent ⇒
     // null ⇒ balanced ⇒ the reviewer prompt is byte-identical.
     reviewProfile?: ReviewProfile | null | undefined;
+    // `.gittensory.yml` review.security_focus (#review-security-focus), resolved by the caller from the
+    // (already-cached) manifest. Orthogonal to reviewProfile — composes with it rather than replacing it.
+    // Absent/false ⇒ the reviewer prompt is byte-identical.
+    reviewSecurityFocus?: boolean | undefined;
     // `.gittensory.yml` review.path_instructions (#review-path-instructions), resolved by the caller from the
     // cached manifest. The CONFIG (not a fetch) is threaded in; the per-PR glob match against `files` happens
     // here (pure), so the AI path makes no extra manifest fetch. Absent/empty ⇒ byte-identical reviewer prompt.
@@ -5389,6 +5393,7 @@ export async function runAiReviewForAdvisory(
       observability: { rag: ragTelemetry },
       enrichment,
       profile: args.reviewProfile ?? null,
+      securityFocus: args.reviewSecurityFocus === true,
       // Inline comments (#inline-comments): ask the model for line-anchored findings only when the operator flag,
       // the cutover allowlist, AND the per-repo manifest toggle all pass. Otherwise the prompt is byte-identical.
       inlineFindings: shouldRequestInlineFindings(
@@ -6522,13 +6527,16 @@ async function maybePublishPrPublicSurface(
         },
         async () => {
           const reviewManifest = await loadRepoFocusManifest(env, repoFullName).catch(() => null);
-          // `.gittensory.yml` review.profile + review.path_instructions + review.exclude_paths (#review-profile /
-          // #review-path-instructions / #review-exclude-paths): resolve from the manifest (cached from settings
-          // resolution, so a cheap cache hit — no extra fetch) and thread them into the AI review. Profile shapes
-          // nitpickiness; path-instructions add per-path guidance; exclude-paths drop files from review. Absent ⇒
-          // byte-identical prompt. Fail-safe to defaults on any read error (resolveReviewPromptOverrides).
+          // `.gittensory.yml` review.profile + review.security_focus + review.path_instructions +
+          // review.exclude_paths (#review-profile / #review-security-focus / #review-path-instructions /
+          // #review-exclude-paths): resolve from the manifest (cached from settings resolution, so a cheap cache
+          // hit — no extra fetch) and thread them into the AI review. Profile shapes nitpickiness; security-focus
+          // adds elevated scrutiny for a security-defect category (orthogonal to profile); path-instructions add
+          // per-path guidance; exclude-paths drop files from review. Absent ⇒ byte-identical prompt. Fail-safe to
+          // defaults on any read error (resolveReviewPromptOverrides).
           const {
             profile: reviewProfile,
+            securityFocus: reviewSecurityFocus,
             inlineComments: reviewInlineComments,
             pathInstructions: reviewPathInstructions,
             instructions: manifestReviewInstructions,
@@ -6609,6 +6617,7 @@ async function maybePublishPrPublicSurface(
                 }
               : null,
             profile: reviewProfile,
+            securityFocus: reviewSecurityFocus,
             inlineComments: inlineCommentsEnabledForReview,
             pathInstructions: reviewPathInstructions,
             pathGuidance: resolveReviewPathInstructions(
@@ -6718,6 +6727,7 @@ async function maybePublishPrPublicSurface(
               confirmedContributor,
               files: reviewFilesForAi,
               reviewProfile,
+              reviewSecurityFocus,
               reviewPathInstructions,
               reviewInstructions,
               reviewExcludePaths,
