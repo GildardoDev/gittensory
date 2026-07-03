@@ -12,7 +12,15 @@ describe("test evidence helpers", () => {
     expect(isTestPath("integration/api_flow.cy.ts")).toBe(true);
     expect(isTestPath("playwright/smoke.spec.ts")).toBe(true);
     expect(isTestPath("cypress/e2e/checkout.cy.js")).toBe(true);
+    // Cypress/Playwright e2e tests in Node/TS module extensions.
+    expect(isTestPath("cypress/e2e/checkout.cy.mts")).toBe(true);
+    expect(isTestPath("e2e/flow.e2e.mjs")).toBe(true);
     expect(isTestPath("components/__snapshots__/Card.tsx.snap")).toBe(true);
+    // .test/.spec files in Node/TS ESM + CommonJS module extensions.
+    expect(isTestPath("src/loader.test.mts")).toBe(true);
+    expect(isTestPath("src/legacy.spec.cjs")).toBe(true);
+    expect(isTestPath("src/config.test.cts")).toBe(true);
+    expect(isTestPath("src/widget.spec.mjs")).toBe(true);
     expect(isTestPath("src/state.snap")).toBe(false);
     expect(isTestPath("src/widget.rs")).toBe(false);
   });
