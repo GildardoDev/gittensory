@@ -171,6 +171,16 @@ const DEPENDENCY_MANIFEST_NAMES: ReadonlySet<string> = new Set([
   // classic setuptools packaging manifests.
   "setup.py",
   "setup.cfg",
+  // Crystal (shards) + Erlang (rebar3) manifests — their lockfiles (shard.lock,
+  // rebar.lock) are already recognized above, so the manifests they resolve
+  // belong here for the same reason as the Conan/Swift/CocoaPods pairs.
+  "shard.yml",
+  "rebar.config",
+  // Further well-known dependency manifests for ecosystems not yet represented.
+  "elm.json", // Elm
+  "deps.edn", // Clojure (tools.deps)
+  "project.clj", // Clojure (Leiningen)
+  "environment.yml", // conda
 ]);
 
 const DOCS_EXTENSIONS: ReadonlySet<string> = new Set(["md", "mdx", "markdown", "rst", "adoc", "asciidoc"]);

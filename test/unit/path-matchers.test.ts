@@ -182,6 +182,12 @@ describe("isDependencyManifestFile", () => {
       "build.sbt",
       "setup.py",
       "packages/py/setup.cfg",
+      "shard.yml",
+      "erlang/rebar.config",
+      "elm.json",
+      "deps.edn",
+      "project.clj",
+      "conda/environment.yml",
     ]) {
       expect(isDependencyManifestFile(path)).toBe(true);
     }
